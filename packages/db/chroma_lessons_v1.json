@@ -1,0 +1,90 @@
+{
+  "run-orbit-v2-discovery-01": {
+    "collection": "lessons_v1",
+    "run_id": "run-orbit-v2-discovery-01",
+    "timestamp": "2026-10-05T06:11:09.495568+00:00",
+    "summary": {
+      "what_worked": [
+        "Deterministic scope locking pruned unbounded real-time collaboration before code generation.",
+        "FastAPI + Pydantic v2 schemas aligned 1:1 with OpenAPI 3.1 specification.",
+        "Next.js 15 App Router wireframes compiled with 100% type safety and zero ESLint errors.",
+        "Automated test gates achieved 100% pass rate: 32/32 Pytest endpoint cases and 8/8 Vitest page suites.",
+        "Zero high/critical security vulnerabilities across all runtime dependencies.",
+        "Instant one-command container boot verified via /healthz runtime probes."
+      ],
+      "what_failed": [
+        "Interactive prompt in 'next lint' on cold repositories required pre-configured .eslintrc.json.",
+        "Vitest regex matcher ambiguity on loading versus resolved DOM states required specific element selectors.",
+        "API create_access_token signature required subject string parameter instead of payload dict.",
+        "Stripe checkout mock lacked strict 404 validation for unmapped run identifiers."
+      ],
+      "what_to_try_next_time": [
+        "Pre-seed .eslintrc.json during RepoScaffoldAgent (C1) phase to avoid any interactive linter prompts.",
+        "Enforce strict DOM data-testid attributes across all wireframe templates for resilient UI assertions.",
+        "Introduce an automated type-contract linter verifying Pytest fixtures directly against security functions.",
+        "Standardize download token length invariants in the shared Pydantic validation schema."
+      ]
+    },
+    "metrics": {
+      "total_agent_nodes": 22,
+      "quality_gate_status": "ALL_GREEN",
+      "test_pass_ratio": "40/40 (100%)",
+      "repairs_required": 3,
+      "repairs_exhausted": 0
+    },
+    "embedding_metadata": {
+      "tags": [
+        "monorepo",
+        "fastapi",
+        "nextjs15",
+        "scope_lock",
+        "self_healing"
+      ],
+      "deliverable_type": "full_stack_web_api"
+    }
+  },
+  "test-run-reflection-f2": {
+    "collection": "lessons_v1",
+    "run_id": "test-run-reflection-f2",
+    "timestamp": "2026-10-05T09:22:03.040336+00:00",
+    "summary": {
+      "what_worked": [
+        "Deterministic scope locking pruned unbounded real-time collaboration before code generation.",
+        "FastAPI + Pydantic v2 schemas aligned 1:1 with OpenAPI 3.1 specification.",
+        "Next.js 15 App Router wireframes compiled with 100% type safety and zero ESLint errors.",
+        "Automated test gates achieved 100% pass rate: 32/32 Pytest endpoint cases and 8/8 Vitest page suites.",
+        "Zero high/critical security vulnerabilities across all runtime dependencies.",
+        "Instant one-command container boot verified via /healthz runtime probes."
+      ],
+      "what_failed": [
+        "Interactive prompt in 'next lint' on cold repositories required pre-configured .eslintrc.json.",
+        "Vitest regex matcher ambiguity on loading versus resolved DOM states required specific element selectors.",
+        "API create_access_token signature required subject string parameter instead of payload dict.",
+        "Stripe checkout mock lacked strict 404 validation for unmapped run identifiers."
+      ],
+      "what_to_try_next_time": [
+        "Pre-seed .eslintrc.json during RepoScaffoldAgent (C1) phase to avoid any interactive linter prompts.",
+        "Enforce strict DOM data-testid attributes across all wireframe templates for resilient UI assertions.",
+        "Introduce an automated type-contract linter verifying Pytest fixtures directly against security functions.",
+        "Standardize download token length invariants in the shared Pydantic validation schema."
+      ]
+    },
+    "metrics": {
+      "total_agent_nodes": 22,
+      "quality_gate_status": "ALL_GREEN",
+      "test_pass_ratio": "40/40 (100%)",
+      "repairs_required": 3,
+      "repairs_exhausted": 0
+    },
+    "embedding_metadata": {
+      "tags": [
+        "monorepo",
+        "fastapi",
+        "nextjs15",
+        "scope_lock",
+        "self_healing"
+      ],
+      "deliverable_type": "full_stack_web_api"
+    }
+  }
+}

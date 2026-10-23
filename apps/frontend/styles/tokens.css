@@ -1,0 +1,110 @@
+/* ORBIT LANDING EXPERIENCE V4 — DESIGN SYSTEM TOKENS */
+:root {
+  /* COLOR PALETTE */
+  --bg-void: #050507;
+  --bg-surface: #0A0A0F;
+  --fg-primary: #EDEDF2;
+  --fg-secondary: #8A8A96;
+  --fg-tertiary: #4A4A55;
+  --accent: #7C5CFF;
+  --accent-glow: #A48BFF;
+  --signal: #4ADE80;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+
+  /* FLUID TYPE SCALE */
+  --font-display-xl: clamp(3.5rem, 8vw, 7rem);
+  --line-display-xl: 0.95;
+  --letter-display-xl: -0.04em;
+
+  --font-display-lg: clamp(2.5rem, 5vw, 4rem);
+  --line-display-lg: 1.0;
+  --letter-display-lg: -0.03em;
+
+  --font-h1: clamp(2rem, 3.5vw, 3rem);
+  --line-h1: 1.1;
+  --letter-h1: -0.02em;
+
+  --font-h2: clamp(1.5rem, 2.5vw, 2rem);
+  --line-h2: 1.2;
+  --letter-h2: -0.01em;
+
+  --font-body: 1rem;
+  --line-body: 1.6;
+  --letter-body: 0em;
+
+  --font-caption: 0.8125rem;
+  --line-caption: 1.5;
+  --letter-caption: 0.02em;
+
+  --font-mono: 0.75rem;
+  --line-mono: 1.4;
+  --letter-mono: 0.08em;
+
+  /* SPACING (8px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --space-48: 192px;
+  --space-64: 256px;
+
+  /* CORNER RADII */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+  --radius-full: 9999px;
+
+  /* MOTION & EASING */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 200ms;
+  --duration-base: 400ms;
+  --duration-slow: 700ms;
+  --duration-cine: 1200ms;
+
+  /* DEPTH & ATMOSPHERE */
+  --fog-near: #050507;
+  --fog-far: #0F0A1F;
+  --fog-density: 0.018;
+}
+
+/* Base Utility Classes */
+.bg-void {
+  background-color: var(--bg-void);
+}
+
+.bg-surface {
+  background-color: var(--bg-surface);
+}
+
+.text-fg-primary {
+  color: var(--fg-primary);
+}
+
+.text-fg-secondary {
+  color: var(--fg-secondary);
+}
+
+.text-fg-tertiary {
+  color: var(--fg-tertiary);
+}
+
+.text-accent {
+  color: var(--accent);
+}
+
+.bg-accent {
+  background-color: var(--accent);
+}
+
+.border-accent {
+  border-color: var(--accent);
+}

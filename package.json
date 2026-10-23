@@ -1,0 +1,17 @@
+{
+  "name": "ai-startup-copilot",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.7.0",
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "lint:frontend": "pnpm --filter frontend lint",
+    "typecheck:frontend": "pnpm --filter frontend typecheck",
+    "test:frontend": "pnpm --filter frontend test",
+    "format": "prettier --write \"apps/frontend/**/*.{ts,tsx,css,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "name": "orbit-design-tokens",
+  "version": "2.0.0",
+  "description": "Design tokens for ORBIT v2. 100% compatible with Tailwind CSS variables and Radix UI.",
+  "tokens": {
+    "color": {
+      "brand": {
+        "primary": { "value": "#6366F1", "description": "Indigo 500 — Primary action & brand accent" },
+        "primaryHover": { "value": "#4F46E5", "description": "Indigo 600 — Hover state" },
+        "primaryGlow": { "value": "rgba(99, 102, 241, 0.25)", "description": "Glow accent for active graph nodes" },
+        "secondary": { "value": "#06B6D4", "description": "Cyan 500 — Secondary telemetry pulse" },
+        "accent": { "value": "#8B5CF6", "description": "Purple 500 — Special highlights & verified badges" }
+      },
+      "dark": {
+        "bgBase": { "value": "#090A0F", "description": "Main application background canvas" },
+        "bgSubtle": { "value": "#12141C", "description": "Card backgrounds and sidebars" },
+        "bgElevated": { "value": "#181B26", "description": "Modals, dropdowns, and drawers" },
+        "borderBase": { "value": "#262A38", "description": "Subtle borders and dividers" },
+        "borderHighlight": { "value": "#3B4256", "description": "Active borders and focus rings" },
+        "textPrimary": { "value": "#F8FAFC", "description": "Primary high-contrast text" },
+        "textSecondary": { "value": "#94A3B8", "description": "Secondary metadata text" },
+        "textMuted": { "value": "#64748B", "description": "Tertiary disabled/placeholder text" }
+      },
+      "status": {
+        "success": { "value": "#10B981", "description": "Emerald 500 — Verification pass & completed runs" },
+        "successGlow": { "value": "rgba(16, 185, 129, 0.2)", "description": "Success glow for node complete" },
+        "warning": { "value": "#F59E0B", "description": "Amber 500 — Clarification required & budget warning" },
+        "error": { "value": "#EF4444", "description": "Rose 500 — Gate failure & compiler error" },
+        "errorGlow": { "value": "rgba(239, 68, 68, 0.25)", "description": "Repair trigger pulse" },
+        "info": { "value": "#38BDF8", "description": "Sky 400 — Telemetry notifications" }
+      },
+      "graph": {
+        "nodeDefault": { "value": "#1E2230" },
+        "nodeActive": { "value": "#4338CA" },
+        "nodeCompleted": { "value": "#065F46" },
+        "nodeFailed": { "value": "#881337" },
+        "edgeDefault": { "value": "#475569" },
+        "edgeRepair": { "value": "#F43F5E" }
+      }
+    },
+    "typography": {
+      "fontFamily": {
+        "sans": { "value": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+        "mono": { "value": "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }
+      },
+      "fontSize": {
+        "xs": { "value": "0.75rem", "lineHeight": "1rem" },
+        "sm": { "value": "0.875rem", "lineHeight": "1.25rem" },
+        "base": { "value": "1rem", "lineHeight": "1.5rem" },
+        "lg": { "value": "1.125rem", "lineHeight": "1.75rem" },
+        "xl": { "value": "1.25rem", "lineHeight": "1.75rem" },
+        "2xl": { "value": "1.5rem", "lineHeight": "2rem" },
+        "3xl": { "value": "1.875rem", "lineHeight": "2.25rem" },
+        "4xl": { "value": "2.25rem", "lineHeight": "2.5rem" }
+      },
+      "fontWeight": {
+        "normal": { "value": "400" },
+        "medium": { "value": "500" },
+        "semibold": { "value": "600" },
+        "bold": { "value": "700" }
+      }
+    },
+    "spacing": {
+      "1": { "value": "0.25rem" },
+      "2": { "value": "0.5rem" },
+      "3": { "value": "0.75rem" },
+      "4": { "value": "1rem" },
+      "5": { "value": "1.25rem" },
+      "6": { "value": "1.5rem" },
+      "8": { "value": "2rem" },
+      "10": { "value": "2.5rem" },
+      "12": { "value": "3rem" },
+      "16": { "value": "4rem" }
+    },
+    "borderRadius": {
+      "sm": { "value": "0.25rem" },
+      "md": { "value": "0.375rem" },
+      "lg": { "value": "0.5rem" },
+      "xl": { "value": "0.75rem" },
+      "2xl": { "value": "1rem" },
+      "full": { "value": "9999px" }
+    },
+    "shadow": {
+      "card": { "value": "0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5)" },
+      "elevated": { "value": "0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6)" },
+      "glowIndigo": { "value": "0 0 20px rgba(99, 102, 241, 0.35)" },
+      "glowGreen": { "value": "0 0 20px rgba(16, 185, 129, 0.35)" },
+      "glowRed": { "value": "0 0 20px rgba(239, 68, 68, 0.35)" }
+    }
+  }
+}

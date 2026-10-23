@@ -1,0 +1,681 @@
+openapi: 3.1.0
+info:
+  title: ORBIT v2 Core Platform API
+  version: 2.0.0
+  description: >-
+    Multi-agent orchestrator transforming raw startup ideas into verified, bootable,
+    and tested full-stack monorepo packages.
+servers:
+  - url: http://localhost:8000
+    description: Local Development Server
+  - url: https://api.orbit.dev
+    description: Production Fly.io API Gateway
+
+paths:
+  # ─── AUTHENTICATION ────────────────────────────────────────────────────────
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate User
+      description: Exchanges email and password credentials for short-lived JWT and HTTP-only refresh cookie.
+      operationId: login
+      tags: [Auth]
+      x-rate-limit:
+        limit: 10
+        window: 1m
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh Access Token
+      description: Rotates refresh token and issues a new access token.
+      operationId: refreshToken
+      tags: [Auth]
+      x-rate-limit:
+        limit: 30
+        window: 1m
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/logout:
+    post:
+      summary: Invalidate Session
+      description: Revokes active refresh token in database.
+      operationId: logout
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /api/v1/auth/me:
+    get:
+      summary: Get Current User Profile
+      operationId: getCurrentUser
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # ─── ORGANIZATIONS ─────────────────────────────────────────────────────────
+  /api/v1/orgs:
+    get:
+      summary: List User Organizations
+      operationId: listOrgs
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      x-rate-limit:
+        limit: 60
+        window: 1m
+      responses:
+        '200':
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrgResponse'
+
+  /api/v1/orgs/{org_id}:
+    get:
+      summary: Get Organization Details
+      operationId: getOrg
+      tags: [Organizations]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: org_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ─── RUNS (ORCHESTRATION PIPELINE) ─────────────────────────────────────────
+  /api/v1/runs:
+    get:
+      summary: List Pipeline Runs
+      operationId: listRuns
+      tags: [Runs]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: org_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of pipeline runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunSummaryResponse'
+    post:
+      summary: Create & Initialize New Pipeline Run
+      operationId: createRun
+      tags: [Runs]
+      security:
+        - BearerAuth: []
+      x-rate-limit:
+        limit: 20
+        window: 1m
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '201':
+          description: Run initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+
+  /api/v1/runs/{run_id}:
+    get:
+      summary: Get Pipeline Run Status & Telemetry
+      operationId: getRun
+      tags: [Runs]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipeline run details and current node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/runs/{run_id}/clarify:
+    post:
+      summary: Submit Clarification Answers
+      description: Resumes pipeline when IntakeAgent flags clarity < 40%.
+      operationId: submitClarification
+      tags: [Runs]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationAnswersRequest'
+      responses:
+        '200':
+          description: Answers applied and pipeline resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetailResponse'
+
+  /api/v1/runs/{run_id}/spec:
+    get:
+      summary: Get Run PRD & Scope Contract
+      operationId: getRunSpecification
+      tags: [Runs]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: PRD markdown and locked scope contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecificationResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # ─── ARTIFACTS ─────────────────────────────────────────────────────────────
+  /api/v1/runs/{run_id}/artifacts:
+    get:
+      summary: List Generated Artifacts
+      operationId: listArtifacts
+      tags: [Artifacts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of generated artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArtifactResponse'
+
+  /api/v1/runs/{run_id}/artifacts/{artifact_id}:
+    get:
+      summary: Get Single Artifact Details
+      operationId: getArtifact
+      tags: [Artifacts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact record and download path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactResponse'
+
+  # ─── REPAIRS & VERIFICATION ────────────────────────────────────────────────
+  /api/v1/runs/{run_id}/repairs:
+    get:
+      summary: List Diagnostic Repair Records
+      operationId: listRepairs
+      tags: [Repairs]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Remediation log from RepairAgent
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RepairResponse'
+
+  # ─── CHECKOUT & EXPORT ─────────────────────────────────────────────────────
+  /api/v1/runs/{run_id}/checkout:
+    post:
+      summary: Create Stripe Checkout Session ($29/export)
+      operationId: createCheckout
+      tags: [Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stripe session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+
+  /api/v1/runs/{run_id}/export:
+    get:
+      summary: Download Verified Monorepo ZIP Package
+      operationId: downloadExport
+      tags: [Orders]
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binary ZIP stream
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Invalid or expired download token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+# ─── COMPONENTS & SCHEMAS ────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequestError:
+      description: Malformed request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnauthorizedError:
+      description: Authentication credentials missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFoundError:
+      description: Requested resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimitError:
+      description: Exceeded allowed rate limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    # Error Envelope (Strict Rule Requirement)
+    ErrorEnvelope:
+      type: object
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          example: INVALID_CREDENTIALS
+        message:
+          type: string
+          example: The email or password provided is incorrect.
+        details:
+          type: object
+          additionalProperties: true
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # Auth Schemas
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    AuthResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    UserResponse:
+      type: object
+      required: [id, email, full_name, is_active, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        is_active:
+          type: boolean
+        is_verified:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    # Organization Schemas
+    OrgResponse:
+      type: object
+      required: [id, name, slug, billing_email, subscription_tier, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        billing_email:
+          type: string
+          format: email
+        subscription_tier:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # Run Schemas
+    CreateRunRequest:
+      type: object
+      required: [org_id, title, idea_raw]
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        idea_raw:
+          type: string
+
+    ClarificationAnswersRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: string
+
+    RunSummaryResponse:
+      type: object
+      required: [run_id, title, status, current_node, scope_locked, created_at]
+      properties:
+        run_id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [intake, awaiting_clarification, scope_locked, building, verifying, repaired, completed, failed]
+        current_node:
+          type: string
+        scope_locked:
+          type: boolean
+        clarity_score:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    RunDetailResponse:
+      type: object
+      required: [run_id, org_id, title, idea_raw, status, current_node, scope_locked, repair_count, created_at]
+      properties:
+        run_id:
+          type: string
+        org_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        idea_raw:
+          type: string
+        normalized_idea:
+          type: string
+          nullable: true
+        status:
+          type: string
+        current_node:
+          type: string
+        clarity_score:
+          type: number
+          nullable: true
+        scope_locked:
+          type: boolean
+        repair_count:
+          type: integer
+        reproducibility_hash:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SpecificationResponse:
+      type: object
+      required: [run_id, prd_markdown, scope_contract, version]
+      properties:
+        run_id:
+          type: string
+        prd_markdown:
+          type: string
+        scope_contract:
+          type: object
+          required: [in_scope, out_of_scope, assumptions]
+          properties:
+            in_scope:
+              type: array
+              items:
+                type: string
+            out_of_scope:
+              type: array
+              items:
+                type: string
+            assumptions:
+              type: array
+              items:
+                type: string
+        architecture_spec:
+          type: object
+          nullable: true
+        version:
+          type: integer
+
+    ArtifactResponse:
+      type: object
+      required: [artifact_id, run_id, artifact_type, name, file_path, sha256, size_bytes, created_at]
+      properties:
+        artifact_id:
+          type: string
+        run_id:
+          type: string
+        artifact_type:
+          type: string
+          enum: [prd, scope_contract, openapi_spec, db_schema, ui_spec, package_zip, test_report, threat_model]
+        name:
+          type: string
+        file_path:
+          type: string
+        sha256:
+          type: string
+        size_bytes:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    RepairResponse:
+      type: object
+      required: [repair_id, run_id, node, attempt_number, error_type, status, created_at]
+      properties:
+        repair_id:
+          type: string
+        run_id:
+          type: string
+        node:
+          type: string
+        attempt_number:
+          type: integer
+        error_type:
+          type: string
+        error_message:
+          type: string
+        diff_applied:
+          type: string
+          nullable: true
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CheckoutResponse:
+      type: object
+      required: [checkout_url, session_id]
+      properties:
+        checkout_url:
+          type: string
+        session_id:
+          type: string

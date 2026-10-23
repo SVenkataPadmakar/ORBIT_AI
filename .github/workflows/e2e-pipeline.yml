@@ -1,0 +1,111 @@
+name: ORBIT End-to-End Pipeline & Build Verification
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-pipeline:
+    name: Run 7-Agent E2E Pipeline & Sandbox Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: copilot
+          POSTGRES_PASSWORD: changeme
+          POSTGRES_DB: ai_startup_copilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl zip unzip
+
+      - name: Install Python Dependencies
+        working-directory: apps/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --no-ansi
+
+      - name: Verify Docker Compose Environment
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Run E2E Full Pipeline Test
+        working-directory: apps/backend
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: postgresql+asyncpg://copilot:changeme@localhost:5432/ai_startup_copilot
+          ORBIT_RUNS_DIR: runs
+          ENVIRONMENT: test
+        run: |
+          pytest tests/e2e/test_full_pipeline.py -v --durations=10
+
+      - name: Run Complete Constitutional Agent Test Suite
+        working-directory: apps/backend
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: postgresql+asyncpg://copilot:changeme@localhost:5432/ai_startup_copilot
+          ORBIT_RUNS_DIR: runs
+          ENVIRONMENT: test
+        run: |
+          pytest tests/test_risk_analysis_and_streaming.py tests/test_developer_agent.py tests/unit/test_orbit_pipeline_skeleton.py -v
+
+      - name: Upload Deliverable Orbit Zip Artifact (if generated)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orbit-deliverable-artifacts
+          path: |
+            apps/backend/runs/**/orbit.zip
+            apps/backend/runs/**/risk.md
+            apps/backend/runs/**/evidence/*
+          if-no-files-found: ignore
