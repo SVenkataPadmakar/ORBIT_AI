@@ -63,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(runs_router)
 
     @app.get("/health", tags=["health"])
+    @app.get("/healthz", tags=["health"])
+    @app.get("/api/health", tags=["health"])
     async def health_check() -> dict[str, str]:
         """
         Liveness + dependency check. Used by the Docker HEALTHCHECK, the ALB
