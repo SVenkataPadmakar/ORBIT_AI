@@ -28,6 +28,7 @@ anthropic = "^0.34.2"
 # below 3.0 per the maintainers' own compatibility warning about upcoming
 # Automatic Function Calling changes in the next major version.
 google-genai = ">=1.60,<3.0"
+google-generativeai = "^0.8.6"
 chromadb = "^1.5.0"
 stripe = "^10.11.0"
 boto3 = "^1.35.24"

@@ -11,8 +11,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   experimental: {
-    cpus: 1,
-    workerThreads: false,
     optimizePackageImports: [
       "three",
       "@react-three/fiber",

@@ -57,10 +57,12 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RBACMiddleware)
 
+    from app.api.chat import router as chat_router
     from app.api.runs import router as runs_router
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     app.include_router(runs_router)
+    app.include_router(chat_router)
 
     @app.get("/health", tags=["health"])
     @app.get("/healthz", tags=["health"])
