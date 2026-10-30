@@ -50,12 +50,13 @@ export default function OrbitUniverseCanvas({
         camera={{ position: [0, 1.8, 7.5], fov: 48, near: 0.1, far: 200 }}
         dpr={dpr}
         gl={{
-          antialias: true,
+          antialias: false,
           alpha: true,
-          powerPreference: "high-performance",
+          powerPreference: "default",
           failIfMajorPerformanceCaveat: false,
           stencil: false,
           depth: true,
+          preserveDrawingBuffer: false,
         }}
         onCreated={({ gl }) => {
           gl.domElement.addEventListener("webglcontextlost", (event) => {

@@ -73,13 +73,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  webpack: (config, { dev }) => {
-    if (dev) {
-      config.cache = {
-        type: "filesystem",
-        maxMemoryGenerations: 1,
-      };
-    }
+  onDemandEntries: {
+    maxInactiveAge: 15 * 1000,
+    pagesBufferLength: 2,
+  },
+  webpack: (config) => {
     return config;
   },
 };

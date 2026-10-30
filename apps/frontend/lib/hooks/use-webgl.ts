@@ -9,18 +9,54 @@ let cachedSupport: boolean | null = null;
 if (typeof window !== "undefined") {
   const originalError = window.console.error;
   window.console.error = function (...args: unknown[]) {
-    const first = typeof args[0] === "string" ? args[0] : "";
-    if (
-      first.includes("THREE.WebGLRenderer: A WebGL context could not be created") ||
-      first.includes("Could not create a WebGL context") ||
-      first.includes("webglcontextcreationerror")
-    ) {
-      // Demote to warning so it is visible in DevTools console without crashing the UI overlay
-      console.warn("[Orbit WebGL Notice]", ...args);
+    const fullText = args
+      .map((a) => {
+        if (typeof a === "string") return a;
+        if (a instanceof Error) return `${a.name} ${a.message} ${a.stack ?? ""}`;
+        if (typeof a === "object" && a !== null) {
+          try {
+            return JSON.stringify(a);
+          } catch {
+            return String(a);
+          }
+        }
+        return String(a);
+      })
+      .join(" ");
+
+    const isWebGLError =
+      fullText.includes("THREE.WebGLRenderer") ||
+      fullText.includes("Error creating WebGL context") ||
+      fullText.includes("selected attributes") ||
+      fullText.includes("WebGL context") ||
+      fullText.includes("webglcontextcreationerror") ||
+      fullText.includes("CONTEXT_LOST_WEBGL");
+
+    if (isWebGLError) {
+      // Demote to warning so it is logged in DevTools console without crashing the UI dev overlay
+      console.warn("[Orbit WebGL Handled Gracefully]", ...args);
       return;
     }
     return originalError.apply(this, args);
   };
+
+  // Intercept window error events for WebGL context creation errors
+  window.addEventListener(
+    "error",
+    (event) => {
+      const msg = event?.message || (event?.error ? event.error.message : "");
+      if (
+        msg.includes("THREE.WebGLRenderer") ||
+        msg.includes("Error creating WebGL context") ||
+        msg.includes("selected attributes")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        console.warn("[Orbit WebGL Handled Gracefully (window.error)]", msg);
+      }
+    },
+    true
+  );
 }
 
 /**
@@ -81,7 +117,7 @@ export function isWebGLSupported(): boolean {
     }
     gl.deleteProgram(program);
 
-    // Clean up context immediately
+    // Free test context immediately so it does not count towards Chrome's WebGL context limit
     const loseContext = gl.getExtension("WEBGL_lose_context");
     if (loseContext) {
       loseContext.loseContext();

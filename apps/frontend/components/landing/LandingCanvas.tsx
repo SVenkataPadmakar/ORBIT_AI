@@ -3,6 +3,8 @@
 import React, { Suspense, useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
+import { useWebGLSupported } from "@/lib/hooks/use-webgl";
+import { WebGLErrorBoundary } from "@/components/ui/webgl-error-boundary";
 import { Scene1Spark } from "./scenes/Scene1Spark";
 import { Scene2Validate } from "./scenes/Scene2Validate";
 import { Scene3Product } from "./scenes/Scene3Product";
@@ -30,6 +32,8 @@ export function LandingCanvas({
 }: LandingCanvasProps) {
   const [hasContextLost, setHasContextLost] = useState(false);
 
+  const webglSupported = useWebGLSupported();
+
   useEffect(() => {
     const handleContextLost = (e: Event) => {
       e.preventDefault();
@@ -41,7 +45,7 @@ export function LandingCanvas({
     return () => window.removeEventListener("webglcontextlost", handleContextLost);
   }, [onContextLost]);
 
-  if (hasContextLost) {
+  if (!webglSupported || hasContextLost) {
     return null;
   }
 
@@ -53,18 +57,20 @@ export function LandingCanvas({
       className="fixed inset-0 z-0 pointer-events-none select-none w-full h-full overflow-hidden"
       aria-hidden="true"
     >
-      <Canvas
-        aria-hidden="true"
-        gl={{
-          antialias: tier !== "TIER_C",
-          alpha: true,
-          powerPreference: "high-performance",
-          depth: true,
-          stencil: false,
-        }}
-        dpr={dpr}
-        eventSource={typeof document !== "undefined" ? document.body : undefined}
-      >
+      <WebGLErrorBoundary fallback={null}>
+        <Canvas
+          aria-hidden="true"
+          gl={{
+            antialias: false,
+            alpha: true,
+            powerPreference: "default",
+            failIfMajorPerformanceCaveat: false,
+            depth: true,
+            stencil: false,
+          }}
+          dpr={dpr}
+          eventSource={typeof document !== "undefined" ? document.body : undefined}
+        >
         <PerspectiveCamera makeDefault fov={42} position={[0, 0, 6]} near={0.1} far={60} />
 
         {/* Global Exponential Depth Fog (Section 9) */}
@@ -131,6 +137,7 @@ export function LandingCanvas({
           )}
         </Suspense>
       </Canvas>
+      </WebGLErrorBoundary>
     </div>
   );
 }
