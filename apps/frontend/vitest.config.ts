@@ -5,9 +5,14 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
+  server: {
+    fs: {
+      strict: false,
+    },
+  },
   test: {
     environment: "jsdom",
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: [path.resolve(__dirname, "vitest.setup.ts")],
     globals: true,
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
     pool: "threads",

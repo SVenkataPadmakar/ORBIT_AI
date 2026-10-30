@@ -62,6 +62,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/chat",
+        destination: "http://localhost:8000/api/chat",
+      },
+      {
         source: "/api/runs/:path*",
         destination: "http://localhost:8000/api/runs/:path*",
       },
@@ -72,6 +76,10 @@ const nextConfig: NextConfig = {
       {
         source: "/v1/:path*",
         destination: "http://localhost:8000/v1/:path*",
+      },
+      {
+        source: "/api/:path*",
+        destination: "http://localhost:8000/api/:path*",
       },
     ];
   },
