@@ -8,7 +8,7 @@ wherever configuration is needed.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,14 +22,18 @@ class Settings(BaseSettings):
 
     # ---- Database ----
     database_url: str = Field(
-        default="postgresql+asyncpg://copilot:changeme@localhost:5432/ai_startup_copilot"
+        default="postgresql+asyncpg://copilot:changeme@localhost:5432/ai_startup_copilot",
+        validation_alias=AliasChoices("DATABASE_URL", "database_url"),
     )
     database_pool_size: int = 10
     database_max_overflow: int = 20
     database_echo: bool = False
 
     # ---- Redis / Celery ----
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("REDIS_URL", "redis_url"),
+    )
     pipeline_execution_mode: Literal["auto", "queued", "inline"] = "auto"
 
     # ---- ChromaDB ----
@@ -45,12 +49,48 @@ class Settings(BaseSettings):
     google_oauth_client_secret: str = ""
     google_oauth_redirect_uri: str = "http://localhost:3000/auth/google/callback"
 
-    # ---- LLM Providers ----
+    # ---- Constitutional LLM & Service API Keys ----
     ai_provider: Literal["auto", "anthropic", "openai", "gemini", "demo"] = "auto"
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    google_gemini_api_key: str = ""
-    gemini_chat_model: str = "gemini-2.0-flash"
+    gemini_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key", "GOOGLE_GEMINI_API_KEY", "google_gemini_api_key"),
+    )
+    gemini_api_key_2: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMINI_API_KEY_2", "gemini_api_key_2", "GOOGLE_GEMINI_API_KEY_2", "google_gemini_api_key_2"),
+    )
+    openai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_API_KEY", "openai_api_key"),
+    )
+    anthropic_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "anthropic_api_key"),
+    )
+    anthropic_chat_model: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        validation_alias=AliasChoices("ANTHROPIC_CHAT_MODEL", "anthropic_chat_model"),
+    )
+    tavily_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TAVILY_API_KEY", "tavily_api_key"),
+    )
+    e2b_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("E2B_API_KEY", "e2b_api_key"),
+    )
+    deepseek_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("DEEPSEEK_API_KEY", "deepseek_api_key"),
+    )
+    deepseek_base_url: str = Field(
+        default="https://api.deepseek.com/v1",
+        validation_alias=AliasChoices("DEEPSEEK_BASE_URL", "deepseek_base_url"),
+    )
+    gemini_chat_model: str = Field(
+        default="gemini-2.0-flash",
+        validation_alias=AliasChoices("GEMINI_CHAT_MODEL", "gemini_chat_model"),
+    )
 
     # ---- Billing ----
     stripe_secret_key: str = ""
@@ -86,6 +126,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def google_gemini_api_key(self) -> str:
+        return self.gemini_api_key
 
 
 @lru_cache

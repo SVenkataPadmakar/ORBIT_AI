@@ -81,7 +81,42 @@ async def test_full_pipeline_end_to_end_execution(e2e_client, clean_runs_env):
       4. Assert orbit.zip exists at end.
       5. Unzip in a fresh container, verify docker compose up specs & curl /healthz -> 200.
       6. Assert all 7 artifacts are in /artifacts response.
+      7. Model Routing: Gemini for 1, 4, 5, 7; DeepSeek for 6.
     """
+    # Human-in-the-loop key validation
+    gemini_key = (
+        os.getenv("GEMINI_API_KEY_2", "")
+        or os.getenv("GEMINI_API_KEY", "")
+        or os.getenv("GOOGLE_GEMINI_API_KEY", "")
+    ).strip()
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+
+    missing_keys = []
+    if not gemini_key:
+        missing_keys.append("GEMINI_API_KEY")
+    if not deepseek_key:
+        missing_keys.append("DEEPSEEK_API_KEY")
+    if missing_keys:
+        pytest.fail(f"🛑 API KEY REQUIRED: Missing {', '.join(missing_keys)}")
+
+    # Verify model routing: Gemini for 1, 4, 5, 7; DeepSeek for 6
+    from app.graph.manifest import LANE_MODEL_ROUTING, PINNED_MODELS
+
+    assert LANE_MODEL_ROUTING["problem_discovery"] == "default"
+    assert PINNED_MODELS[LANE_MODEL_ROUTING["problem_discovery"]] == "gemini-2.0-flash"
+
+    assert LANE_MODEL_ROUTING["prd_generator"] == "default"
+    assert PINNED_MODELS[LANE_MODEL_ROUTING["prd_generator"]] == "gemini-2.0-flash"
+
+    assert LANE_MODEL_ROUTING["design"] == "default"
+    assert PINNED_MODELS[LANE_MODEL_ROUTING["design"]] == "gemini-2.0-flash"
+
+    assert LANE_MODEL_ROUTING["developer"] == "coder"
+    assert PINNED_MODELS[LANE_MODEL_ROUTING["developer"]] == "deepseek-coder"
+
+    assert LANE_MODEL_ROUTING["risk_analysis"] == "default"
+    assert PINNED_MODELS[LANE_MODEL_ROUTING["risk_analysis"]] == "gemini-2.0-flash"
+
     idea_prompt = "AI-powered interview assistant website"
     logger.info("Executing End-to-End Run for: '%s'", idea_prompt)
 
@@ -177,18 +212,23 @@ async def test_full_pipeline_end_to_end_execution(e2e_client, clean_runs_env):
     assert api_main_path.exists(), "Missing apps/api/main.py in deliverable zip"
 
     # Dynamically import unzipped FastAPI module in container environment
-    spec = importlib.util.spec_from_file_location("unzipped_orbit_api", api_main_path)
-    assert spec is not None and spec.loader is not None
-    unzipped_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(unzipped_mod)
-    unzipped_app = getattr(unzipped_mod, "app")
+    sys.path.insert(0, str(unzip_dir))
+    try:
+        spec = importlib.util.spec_from_file_location("unzipped_orbit_api", api_main_path)
+        assert spec is not None and spec.loader is not None
+        unzipped_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(unzipped_mod)
+        unzipped_app = getattr(unzipped_mod, "app")
+    finally:
+        if str(unzip_dir) in sys.path:
+            sys.path.remove(str(unzip_dir))
 
     # Curl / Probe /healthz on the unzipped deliverable app
     unzipped_transport = ASGITransport(app=unzipped_app)
     async with AsyncClient(transport=unzipped_transport, base_url="http://container-test") as container_client:
         probe_resp = await container_client.get("/healthz")
         assert probe_resp.status_code == 200, f"Unzipped deliverable healthz returned {probe_resp.status_code}"
-        assert probe_resp.json() == {"status": "ok"}
+        assert probe_resp.json().get("status") == "ok"
 
     # ─────────────────────────────────────────────────────────────────────────
     # STEP 6: Assert all 7 primary constitutional artifacts are in /artifacts

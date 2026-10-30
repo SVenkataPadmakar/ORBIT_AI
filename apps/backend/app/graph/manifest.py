@@ -21,20 +21,21 @@ from pydantic import BaseModel, Field
 
 PINNED_MODELS: dict[str, str] = {
     "default": "gemini-2.0-flash",
-    "reasoning": "claude-3-5-sonnet-20241022",
+    "reasoning": "gemini-2.0-flash",
+    "coder": "deepseek-coder",
     "fallback": "gpt-4o-2024-08-06",
     "embedding": "text-embedding-3-small",
 }
 
-# The 7 Constitution agents routing
+# The 7 Constitution agents routing (Gemini for 1, 2, 3, 4, 5, 7; DeepSeek for 6)
 LANE_MODEL_ROUTING: dict[str, str] = {
     "problem_discovery": "default",
     "market_analysis": "default",
-    "feasibility": "reasoning",
-    "prd_generator": "reasoning",
-    "design": "reasoning",
-    "developer": "reasoning",
-    "risk_analysis": "reasoning",
+    "feasibility": "default",
+    "prd_generator": "default",
+    "design": "default",
+    "developer": "coder",
+    "risk_analysis": "default",
 }
 
 DEFAULT_RUN_SEED: int = 42

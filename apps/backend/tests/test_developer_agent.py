@@ -26,8 +26,10 @@ from app.agents.developer import (
     ExecutionBudget,
     BudgetExceededError,
     RepairThresholdExceededError,
+    FailureTaxonomy,
     developer,
 )
+from app.core.llm import get_deepseek_client, generate_deepseek_code
 from app.graph.state import OrbitState
 from app.sandbox.provider import (
     ExecResult,
@@ -155,6 +157,12 @@ def test_developer_sub_fsm_execution_and_artifacts(temp_workspace):
         user_id="user-tester",
         idea="Autonomous AI Technical Interviewer",
         prd_md="# PRD\n## 3. MVP Feature List\nF-01 [Must-Have]\nF-02 [Must-Have]",
+        design={
+            "architecture": "# Architecture\ngraph TB\nTech Stack: FastAPI, Next.js",
+            "schema_sql": "CREATE TABLE users (id UUID PRIMARY KEY);",
+            "openapi": "openapi: 3.1.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}",
+            "wireframes": "ASCII Wireframes\n(F-01) Interview Session",
+        },
     )
 
     sb = LocalDockerProvider(base_dir=temp_workspace)
@@ -257,7 +265,17 @@ def test_success_criterion_zip_package_integrity_and_contents(temp_workspace):
       - FE evidence screenshot present in zip
     """
     run_id = "run-zip-integrity-01"
-    state = OrbitState(run_id=run_id, idea="Autonomous AI Technical Interviewer")
+    state = OrbitState(
+        run_id=run_id,
+        idea="Autonomous AI Technical Interviewer",
+        prd_md="# PRD\n## 3. MVP Feature List\nF-01 [Must-Have]\nF-02 [Must-Have]",
+        design={
+            "architecture": "# Architecture\ngraph TB\nTech Stack: FastAPI, Next.js",
+            "schema_sql": "CREATE TABLE users (id UUID PRIMARY KEY);",
+            "openapi": "openapi: 3.1.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}",
+            "wireframes": "ASCII Wireframes\n(F-01) Interview Session",
+        },
+    )
     sb = LocalDockerProvider(base_dir=temp_workspace)
 
     res = developer(state, sandbox=sb)
@@ -304,3 +322,95 @@ def test_developer_budget_enforcement():
 
     with pytest.raises(BudgetExceededError):
         budget.record_tool_call(tokens_estimate=100)
+
+
+def test_deepseek_client_configuration_and_key_validation(temp_workspace):
+    """
+    Verifies Task 1 & 2:
+      - DeepSeek client points to OpenAI-compatible base_url https://api.deepseek.com/v1.
+      - Developer agent validates DEEPSEEK_API_KEY presence with critical required message.
+      - Developer agent pins model to deepseek-coder.
+    """
+    # 1. Verify DeepSeek client configuration
+    client = get_deepseek_client()
+    assert str(client.base_url).rstrip("/") == "https://api.deepseek.com/v1"
+
+    # 2. Verify human-in-the-loop requirement when DEEPSEEK_API_KEY is missing
+    state = OrbitState(run_id="test-key-missing-01", idea="AI Code Reviewer")
+    with patch.dict(os.environ, {"DEEPSEEK_API_KEY": ""}):
+        with patch("app.agents.developer.get_settings") as mock_settings:
+            mock_settings.return_value.deepseek_api_key = ""
+            with pytest.raises(ValueError, match="🛑 API KEY REQUIRED: I need the DEEPSEEK_API_KEY to test the Developer Agent."):
+                DeveloperFSM(state=state)
+
+    # 3. Verify DeveloperFSM initializes with deepseek-coder when key is present
+    sb = LocalDockerProvider(base_dir=temp_workspace)
+    fsm = DeveloperFSM(state=state, sandbox=sb)
+    assert fsm.model == "deepseek-coder"
+    assert fsm.deepseek_key.startswith("sk-")
+
+
+def test_developer_scaffold_simple_project_with_deepseek(temp_workspace):
+    """
+    Verifies Task 4: Scaffolding a simple project using the Developer Agent with DeepSeek key.
+    Checks scaffold files, backend and frontend creation, and package output.
+    """
+    run_id = "run-deepseek-scaffold-01"
+    state = OrbitState(
+        run_id=run_id,
+        idea="Lightweight AI Task Router",
+        prd_md="# PRD\n## Features\nF-01 Task Routing",
+        design={
+            "architecture": "# Architecture\nFastAPI backend, Next.js frontend",
+            "schema_sql": "CREATE TABLE tasks (id TEXT PRIMARY KEY);",
+            "openapi": "openapi: 3.1.0\ninfo:\n  title: Task Router\n  version: 1.0.0\npaths: {}",
+            "wireframes": "ASCII: Task dashboard",
+        },
+    )
+
+    sb = LocalDockerProvider(base_dir=temp_workspace)
+    with bind_sandbox(sb):
+        sb.start(run_id)
+        fsm = DeveloperFSM(state=state, sandbox=sb)
+        assert fsm.model == "deepseek-coder"
+
+        # Execute scaffolding phase using deepseek-coder configuration
+        fsm.phase_1_scaffold()
+        ws_path = Path(sb.get_workspace_dir())
+        assert (ws_path / "pnpm-workspace.yaml").exists()
+        assert (ws_path / "package.json").exists()
+        assert (ws_path / ".gitignore").exists()
+
+        # Execute backend building
+        fsm.phase_2_build_backend()
+        api_dir = ws_path / "apps" / "api"
+        assert (api_dir / "pyproject.toml").exists()
+        assert (api_dir / "main.py").exists()
+        assert (api_dir / "models.py").exists()
+
+        # Execute frontend building
+        fsm.phase_3_build_frontend()
+        web_dir = ws_path / "apps" / "web"
+        assert (web_dir / "package.json").exists()
+        assert (web_dir / "app" / "page.tsx").exists()
+
+        # Verify repair patch helper logic with FailureTaxonomy
+        repair_patch = fsm._generate_repair_patch(
+            failure_type=FailureTaxonomy.SYNTAX_ERROR,
+            target_file="/workspace/package.json",
+            error_text="SyntaxError: Unexpected token",
+            default_patch='+  "scripts": { "build": "echo build passed" }',
+        )
+        assert repair_patch is not None
+
+        # Verify packaging metadata records deepseek-coder
+        fsm.phase_4_integrate()
+        fsm.phase_5_tests()
+        fsm.phase_6_infra()
+        fsm.phase_7_verify_loop()
+        ws_uri, zip_uri = fsm.phase_8_package()
+
+        assert "orbit.zip" in zip_uri
+        assert (Path(temp_workspace) / run_id / "orbit.zip").exists()
+        sb.stop()
+

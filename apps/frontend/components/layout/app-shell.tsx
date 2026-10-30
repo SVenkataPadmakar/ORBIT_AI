@@ -19,18 +19,8 @@ import { OrbitLogo } from "@/components/ui/orbit-logo";
 
 /* ─── Navigation items ──────────────────────────────────────────────────────── */
 const NAV_ITEMS = [
-    { id: "mission",      label: "Mission Control", icon: Target,        view: "mission"      },
-    { id: "health",       label: "Startup Health & Radar", icon: Activity, view: "health"     },
-    { id: "memory",       label: "Startup Memory Vault", icon: Brain,     view: "memory"      },
-    { id: "evidence",     label: "Validation Lab",  icon: FlaskConical,  view: "evidence"     },
-    { id: "prd",          label: "Product PRD",     icon: FileText,      view: "prd"          },
-    { id: "uiux",         label: "UI/UX Architect", icon: Layout,        view: "uiux"         },
-    { id: "architecture", label: "Tech Architect",  icon: Database,      view: "architecture" },
-    { id: "sprints",      label: "Sprint Board",    icon: Boxes,         view: "sprints"      },
-    { id: "debate",       label: "Agent Debate",    icon: Sparkles,      view: "debate"       },
-    { id: "impact",       label: "Impact Engine",   icon: GitCompare,    view: "impact"       },
-    { id: "launch",       label: "Launch Center",   icon: Rocket,        view: "launch"       },
-    { id: "growth",       label: "Growth Center",   icon: TrendingUp,    view: "growth"       },
+    { id: "dashboard", label: "Dashboard",        icon: Layout, href: "/dashboard",        isProjectScoped: false },
+    { id: "pipeline",  label: "7-Agent Pipeline", icon: Bot,    href: "",                  isProjectScoped: true  },
 ] as const;
 
 /* ─── Rail icon button ──────────────────────────────────────────────────────── */
@@ -180,11 +170,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
 
                 {/* Project nav */}
-                {NAV_ITEMS.map(({ id, label, icon, view: v }) => {
-                    const href = `${projectHref}${projectHref.includes("projects/new") ? "" : `?view=${v}`}`;
-                    const active = Boolean(projectId) && view === v;
+                {NAV_ITEMS.map((item) => {
+                    const href = item.isProjectScoped ? projectHref : item.href;
+                    const active = item.isProjectScoped
+                        ? pathname.startsWith("/projects/")
+                        : pathname === item.href;
                     return (
-                        <RailLink key={id} icon={icon} label={label} href={href} active={active} />
+                        <RailLink key={item.id} icon={item.icon} label={item.label} href={href} active={active} />
                     );
                 })}
 
@@ -317,15 +309,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                 </button>
                             </div>
 
-                            {NAV_ITEMS.map(({ id, label, icon: Icon, view: v }) => {
-                                const href = `${projectHref}${projectHref.includes("projects/new") ? "" : `?view=${v}`}`;
-                                const active = Boolean(projectId) && view === v;
+                            {NAV_ITEMS.map((item) => {
+                                const href = item.isProjectScoped ? projectHref : item.href;
+                                const active = item.isProjectScoped
+                                    ? pathname.startsWith("/projects/")
+                                    : pathname === item.href;
+                                const Icon = item.icon;
                                 return (
                                     <Link
-                                        key={id}
+                                        key={item.id}
                                         href={href}
                                         onClick={() => setMobileOpen(false)}
-                                        aria-label={label}
+                                        aria-label={item.label}
                                         style={{
                                             display: "flex",
                                             alignItems: "center",
@@ -340,7 +335,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                         }}
                                     >
                                         <Icon className="size-4" />
-                                        {label}
+                                        {item.label}
                                     </Link>
                                 );
                             })}

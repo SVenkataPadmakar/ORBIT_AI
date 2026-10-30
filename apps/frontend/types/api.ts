@@ -1,6 +1,15 @@
 export type ProjectStatus = "draft" | "active" | "archived";
 export type PipelineStatus = "queued" | "running" | "completed" | "failed";
 export type PipelineMode = "provider" | "demo";
+export type ConstitutionAgent =
+    | "problem_discovery"
+    | "market_analysis"
+    | "feasibility"
+    | "prd_generator"
+    | "design"
+    | "developer"
+    | "risk_analysis";
+
 export type AgentStage =
     | "problem_discovery"
     | "market_research"
@@ -103,7 +112,7 @@ export interface ProjectListResponse {
 export interface AgentRun {
     id: string;
     pipeline_run_id: string;
-    stage: AgentStage;
+    stage: AgentStage | ConstitutionAgent;
     status: string;
     mode: PipelineMode;
     provider: string;
@@ -246,6 +255,12 @@ export interface PipelineOutputs {
     finance?: FinancialOutput;
     pitch_deck?: PitchDeckOutput;
     vc_evaluation?: VCEvaluationOutput;
+    market_analysis?: MarketResearchOutput;
+    feasibility?: { score: number; gate_passed: boolean; status: string; threshold: number };
+    prd_generator?: ProductStrategyOutput;
+    design?: { artifacts: string[] };
+    developer?: { sandbox: string; build_status: string; repairs_attempted: number; artifact: string };
+    risk_analysis?: { consensus_score: number; overall_risk_rating: string };
 }
 
 export interface PipelineResultResponse extends PipelineStatusResponse {

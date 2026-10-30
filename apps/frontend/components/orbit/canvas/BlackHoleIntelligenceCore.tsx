@@ -101,14 +101,14 @@ export function BlackHoleIntelligenceCore({
         />
       </mesh>
 
-      {/* ── 3. High-Energy Outer Photon Shell ── */}
+      {/* ── 3. High-Energy Coordinate Grid Wireframe Shell ── */}
       <mesh>
-        <sphereGeometry args={[1.06, 24, 24]} />
+        <sphereGeometry args={[1.08, isMobile ? 20 : 32, isMobile ? 20 : 32]} />
         <meshBasicMaterial
-          color="#818CF8"
+          color="#C7D2FE"
           wireframe
           transparent
-          opacity={0.18}
+          opacity={0.55}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />

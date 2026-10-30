@@ -87,90 +87,71 @@ export const OrbitNavbar = memo(function OrbitNavbar({
         )}
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* ── LEFT: Brand + Dominant Descriptor Hierarchy ── */}
-          <Link
-            href="/"
-            aria-label="Orbit — AI Founder Operating System"
-            className="flex items-center gap-3 group select-none"
-            data-cursor="hover"
-          >
-            <OrbitLogo size="sm" showText={false} />
-            <div className="flex flex-col">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-white leading-none group-hover:text-cyan-200 transition-colors">
-                Orbit
+          {/* ── LEFT: Brand + Sector Singularity Core Badge ── */}
+          <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              aria-label="Orbit Idea — AI Copilot"
+              className="flex items-center gap-3 group select-none"
+              data-cursor="hover"
+            >
+              <OrbitLogo size="sm" showText={false} />
+              <div className="flex flex-col">
+                <span className="text-base sm:text-lg font-bold tracking-tight text-white leading-none group-hover:text-cyan-200 transition-colors">
+                  Orbit Idea
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-mono font-medium tracking-widest text-white/50 mt-0.5 uppercase">
+                  AI Copilot
+                </span>
+              </div>
+            </Link>
+
+            {/* SECTOR 01 Singularity Core HUD Chip */}
+            <div className="hidden lg:inline-flex items-center gap-2 px-3 py-1 rounded border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 font-mono text-[10px] tracking-widest uppercase">
+              <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse" />
+              <span>SECTOR 01</span>
+              <span className="text-emerald-500/40">|</span>
+              <span>SINGULARITY CORE</span>
+              <span className="text-emerald-500/40">|</span>
+              <span>EVENT HORIZON ONLINE</span>
+            </div>
+          </div>
+
+          {/* ── RIGHT: Telemetry HUD + Sign In + Start Building ── */}
+          <div className="flex items-center gap-4">
+            {/* Live Telemetry HUD */}
+            <div className="hidden xl:flex items-center gap-3.5 font-mono text-[11px] text-cyan-400/80 mr-2 select-none">
+              <span className="flex items-center gap-1.5">
+                <span className="text-cyan-400/50">⟲</span> POS: 1.00 AU
               </span>
-              <span className="text-[11px] sm:text-xs font-mono font-medium tracking-wide text-white/45 mt-0.5 group-hover:text-white/60 transition-colors">
-                AI Founder Operating System
+              <span className="text-cyan-400/30">|</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-cyan-400/50">⋈</span> BEARING: 0.0°
+              </span>
+              <span className="text-cyan-400/30">|</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-cyan-400/50">◎</span> REFRESH: 21 FPS
               </span>
             </div>
-          </Link>
 
-          {/* ── CENTER: Primary Nav Links (Desktop) ── */}
-          <nav
-            aria-label="Main Navigation"
-            className="hidden md:flex items-center gap-1.5 lg:gap-2 px-3 py-1 rounded-full border border-white/[0.05] bg-white/[0.02] backdrop-blur-md"
-          >
-            {NAV_ITEMS.map((item) => (
-              item.isDemo ? (
-                <button
-                  key={item.label}
-                  onClick={onOpenDemo}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"
-                  data-cursor="hover"
-                >
-                  {item.label}
-                </button>
-              ) : item.href.startsWith("/") ? (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"
-                  data-cursor="hover"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <button
-                  key={item.label}
-                  onClick={() => handleItemClick(item)}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"
-                  data-cursor="hover"
-                >
-                  {item.label}
-                </button>
-              )
-            ))}
-          </nav>
-
-          {/* ── RIGHT: Actions (Sign In, Register, Watch Demo) ── */}
-          <div className="hidden sm:flex items-center gap-3">
             <Link
               href="/login"
               prefetch={true}
-              className="px-3.5 py-2 text-xs font-medium text-white/70 hover:text-white transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white/70 hover:text-white transition-colors"
               data-cursor="hover"
             >
-              Sign In
+              Sign in
             </Link>
 
             <Link
-              href="/register"
+              href="/projects/new"
               prefetch={true}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-white/90 hover:text-white border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-md transition-all"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 border border-indigo-400/30 shadow-[0_0_20px_rgba(124,92,255,0.4)] flex items-center gap-1.5 transition-all hover:scale-[1.02]"
               data-cursor="hover"
             >
-              Register
+              <span>Start Building</span>
+              <ArrowRight className="size-3.5" />
             </Link>
-
-            <button
-              onClick={onOpenDemo}
-              aria-label="Watch Demo"
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600/90 hover:bg-indigo-500 border border-indigo-400/30 shadow-[0_0_20px_rgba(99,102,241,0.35)] flex items-center gap-2 transition-all hover:scale-[1.02]"
-              data-cursor="hover"
-            >
-              <Play className="size-3 fill-white" />
-              <span>Watch Demo</span>
-            </button>
           </div>
 
           {/* ── Mobile Hamburger Menu Toggle ── */}

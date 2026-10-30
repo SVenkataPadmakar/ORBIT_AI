@@ -348,20 +348,18 @@ function CelestialSphere({
         />
       </mesh>
 
-      {/* 3D Aerospace Telemetry Tag - Rendered selectively on hover/select to eliminate 7 continuous DOM reflows */}
-      {(isHovered || isSelected) && (
-        <Html center position={[0, -node.size - 0.35, 0]} distanceFactor={16} zIndexRange={[100, 0]} className="pointer-events-none select-none">
-          <span
-            className={`px-2 py-0.5 rounded text-[10px] font-mono tracking-wider uppercase whitespace-nowrap transition-colors border ${
-              isHovered || isSelected
-                ? "text-white bg-indigo-950/90 border-indigo-400/80 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
-                : "text-indigo-200/60 bg-black/60 border-white/10"
-            }`}
-          >
-            {node.label}
-          </span>
-        </Html>
-      )}
+      {/* 3D Aerospace Telemetry Tag */}
+      <Html center position={[0, -node.size - 0.35, 0]} distanceFactor={7} zIndexRange={[100, 0]} className="pointer-events-none select-none">
+        <span
+          className={`px-2 py-0.5 rounded text-[10px] font-mono tracking-wider uppercase whitespace-nowrap transition-colors border ${
+            isHovered || isSelected
+              ? "text-white bg-indigo-950/90 border-indigo-400/80 shadow-[0_0_12px_rgba(99,102,241,0.5)]"
+              : "text-indigo-200/75 bg-black/75 border-white/15"
+          }`}
+        >
+          {node.label}
+        </span>
+      </Html>
     </group>
   );
 }

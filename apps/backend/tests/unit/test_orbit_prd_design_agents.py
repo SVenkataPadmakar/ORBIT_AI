@@ -46,6 +46,7 @@ def test_prd_generator_structure_and_artifacts() -> None:
         tenant_id="tenant-acme",
         user_id="user-tester",
         idea="AI interview assistant",
+        feasibility={"score": 85, "verdict": "GO"},
         problem_md="# Problem\nTechnical screening is fragmented and slow.",
         market_md="# Market\nTAM is $8.4B across enterprise tech hiring.",
     )
@@ -187,7 +188,11 @@ def test_success_criterion_openapi_validates_against_3_1_spec() -> None:
     openapi.yaml validates against OpenAPI 3.1 spec.
     """
     run_id = "run-openapi-val-01"
-    state = OrbitState(run_id=run_id, idea="AI interview assistant")
+    state = OrbitState(
+        run_id=run_id,
+        idea="AI interview assistant",
+        prd_md="# PRD\n## 3. MVP Feature List\nF-01 [Must-Have]\nF-02 [Must-Have]",
+    )
     res = design(state)
 
     openapi_raw = res["design"]["openapi"]
@@ -207,7 +212,11 @@ async def test_success_criterion_schema_sql_runs_cleanly_on_fresh_postgres() -> 
     Executes in an isolated temporary schema and verifies table creation without errors.
     """
     run_id = "run-schema-sql-val-01"
-    state = OrbitState(run_id=run_id, idea="AI interview assistant")
+    state = OrbitState(
+        run_id=run_id,
+        idea="AI interview assistant",
+        prd_md="# PRD\n## 3. MVP Feature List\nF-01 [Must-Have]\nF-02 [Must-Have]",
+    )
     with patch("app.services.artifact_storage._save_to_postgres", return_value=None):
         res = design(state)
 
@@ -249,7 +258,13 @@ def test_success_criterion_every_prd_feature_has_endpoint_and_wireframe() -> Non
     Every PRD feature has ≥1 endpoint + ≥1 wireframe.
     """
     run_id = "run-e2e-feat-check-01"
-    state = OrbitState(run_id=run_id, idea="AI interview assistant")
+    state = OrbitState(
+        run_id=run_id,
+        idea="AI interview assistant",
+        feasibility={"score": 90, "verdict": "GO"},
+        market_md="# Market\nEnterprise hiring TAM is $8.4B.",
+        problem_md="# Problem\nTechnical screening is fragmented and slow.",
+    )
 
     # 1. Run prd_generator
     prd_res = prd_generator(state)

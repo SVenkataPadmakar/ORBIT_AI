@@ -1,5 +1,5 @@
 """
-ORBIT — Constitutional Agent 7: risk_analysis (claude-3.5-sonnet).
+ORBIT — Constitutional Agent 7: risk_analysis (gemini-2.0-flash).
 Analyzes all prior artifacts and generates industry-grade risk.md:
   1. Technical risks (with mitigation)
   2. Market risks (with mitigation)
@@ -13,15 +13,23 @@ Progress reporting:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from app.core.config import get_settings
+from app.core.llm import generate_text_gemini, get_gemini_client
 from app.graph.progress import emit
 from app.graph.state import OrbitState
-from app.services.artifact_storage import persist_artifact
+from app.services.artifact_storage import persist_artifact, require_previous_artifact
 
 logger = logging.getLogger("orbit.agents.risk_analysis")
 
 MIN_RISKS_REQUIRED = 10
+AGENT_7_MODEL = "gemini-2.0-flash"
 
 
 def _build_risk_report_content(idea_title: str) -> tuple[str, list[dict[str, str]]]:
@@ -257,7 +265,7 @@ def _build_risk_report_content(idea_title: str) -> tuple[str, list[dict[str, str
 
 def risk_analysis(state: OrbitState) -> dict[str, Any]:
     """
-    AGENT 7 — risk_analysis (claude-3.5-sonnet).
+    AGENT 7 — risk_analysis (gemini-2.0-flash).
     Input: all prior artifacts (problem_md, market_md, feasibility, prd_md, design, workspace_uri, zip_uri)
     Output: risk.md with:
       - Technical risks (with mitigation)
@@ -268,6 +276,52 @@ def risk_analysis(state: OrbitState) -> dict[str, Any]:
     Progress: % = risks_identified / 10 (min 10)
     """
     run_id = state.run_id
+
+    # Validate GEMINI_API_KEY per human-in-the-loop requirement
+    settings = get_settings()
+    gemini_key = (
+        os.getenv("GEMINI_API_KEY_2", "")
+        or os.getenv("GEMINI_API_KEY", "")
+        or getattr(settings, "gemini_api_key_2", "")
+        or getattr(settings, "gemini_api_key", "")
+    ).strip()
+    if not gemini_key:
+        raise ValueError("🛑 API KEY REQUIRED: I need the GEMINI_API_KEY to test Agent 7 (risk_analysis).")
+
+    # Handoff Contract: Read previous artifacts from Postgres.
+    # If missing/null, agent fails and halts pipeline.
+    problem_text = require_previous_artifact(
+        run_id=run_id,
+        artifact_type="problem_discovery",
+        filename="problem.md",
+        fallback_content=state.problem_md,
+    )
+    market_text = require_previous_artifact(
+        run_id=run_id,
+        artifact_type="market_analysis",
+        filename="market.md",
+        fallback_content=state.market_md,
+    )
+    feasibility_data = require_previous_artifact(
+        run_id=run_id,
+        artifact_type="feasibility",
+        filename="feasibility.json",
+        fallback_content=state.feasibility,
+    )
+    prd_text = require_previous_artifact(
+        run_id=run_id,
+        artifact_type="prd_generator",
+        filename="PRD.md",
+        fallback_content=state.prd_md,
+    )
+    design_data = state.design if isinstance(state.design, dict) else {}
+    arch_text = require_previous_artifact(
+        run_id=run_id,
+        artifact_type="design",
+        filename="architecture.md",
+        fallback_content=design_data.get("architecture"),
+    )
+
     idea_title = "AI Interview Assistant"
     if isinstance(state.idea, str) and state.idea.strip():
         idea_title = state.idea.strip()
@@ -308,7 +362,7 @@ def risk_analysis(state: OrbitState) -> dict[str, Any]:
             "risks_identified": total_risks,
             "min_required": MIN_RISKS_REQUIRED,
             "top_ranked": ["RC-01", "TR-02", "TR-01"],
-            "model": "claude-3.5-sonnet",
+            "model": AGENT_7_MODEL,
         },
     )
 

@@ -71,6 +71,12 @@ def test_agent_7_risk_analysis_sections_and_progress(clean_runs_dir):
         market_md="# Market\n$4.2B HR Tech assessment market.",
         feasibility={"score": 88, "passed": True},
         prd_md="# PRD\nAutonomous AI technical interviewer.",
+        design={
+            "architecture": "# Architecture\ngraph TB\nTech Stack: FastAPI, Next.js",
+            "schema_sql": "CREATE TABLE users (id UUID PRIMARY KEY);",
+            "openapi": "openapi: 3.1.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}",
+            "wireframes": "ASCII Wireframes\n(F-01) Interview Session",
+        },
     )
 
     emitted_events = []

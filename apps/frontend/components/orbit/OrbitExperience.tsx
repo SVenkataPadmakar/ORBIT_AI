@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import Link from "next/link";
+import { Zap } from "lucide-react";
 import Lenis from "lenis";
 import dynamic from "next/dynamic";
 
@@ -239,6 +241,18 @@ export function OrbitExperience() {
         isOpen={demoOpen}
         onClose={handleCloseDemo}
       />
+
+      {/* ── Bottom-Left Quick Action ── */}
+      <div className="fixed bottom-6 left-6 z-30">
+        <Link
+          href="/projects/new"
+          prefetch={true}
+          className="size-10 rounded-full border border-white/15 bg-black/60 backdrop-blur-md flex items-center justify-center text-white/80 hover:text-white hover:border-white/30 hover:scale-105 transition-all shadow-lg"
+          aria-label="Quick Start Project"
+        >
+          <Zap className="size-4 fill-white text-white" />
+        </Link>
+      </div>
     </div>
   );
 }

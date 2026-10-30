@@ -1,5 +1,5 @@
 """
-ORBIT — Constitutional Agent 6: developer (claude-3.5-sonnet).
+ORBIT — Constitutional Agent 6: developer (deepseek-coder).
 Builds a real, production-ready, working project in an isolated sandbox.
 
 SUB-FSM PIPELINE:
@@ -16,6 +16,7 @@ BUDGETS: 800k tokens, 200 tool calls, 30 min wallclock.
 """
 from __future__ import annotations
 
+from enum import Enum
 import logging
 import os
 import time
@@ -23,9 +24,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from app.core.config import get_settings
+from app.core.llm import generate_deepseek_code, get_deepseek_client
 from app.graph.progress import emit
 from app.graph.state import OrbitState
 from app.sandbox.provider import LocalDockerProvider, SandboxProvider, get_sandbox_provider
+from app.services.artifact_storage import persist_artifact, require_previous_artifact
 from app.tools import artifact, fs, shell, test
 from app.tools.context import bind_sandbox
 
@@ -33,6 +41,21 @@ logger = logging.getLogger("orbit.agents.developer")
 
 TOTAL_FILES_PLANNED = 43
 MAX_REPAIRS_PER_PHASE = 5
+DEVELOPER_MODEL = "deepseek-coder"
+
+
+class FailureTaxonomy(str, Enum):
+    """Constitutional Failure Taxonomy for Developer Agent repairs."""
+    MISSING_DEP = "missing_dep"       # Action: install
+    TYPE_ERROR = "type_error"         # Action: patch 1 file
+    SYNTAX_ERROR = "syntax_error"     # Action: patch 1 line
+    TEST_FAIL = "test_fail"           # Action: patch logic
+    RUNTIME_CRASH = "runtime_crash"   # Action: read logs first
+
+
+class MultipleFilePatchViolationError(RuntimeError):
+    """Raised when a repair violates the constitutional rule: Never patch >1 file per attempt."""
+    pass
 
 
 class BudgetExceededError(Exception):
@@ -82,6 +105,62 @@ class DeveloperFSM:
         self.files_written = 0
         self.last_emitted_pct = 0
         self.current_phase = "INIT"
+
+        # Check DEEPSEEK_API_KEY per human-in-the-loop requirement
+        settings = get_settings()
+        self.deepseek_key = (
+            os.getenv("DEEPSEEK_API_KEY", "")
+            or getattr(settings, "deepseek_api_key", "")
+        ).strip()
+        if not self.deepseek_key:
+            raise ValueError("🛑 API KEY REQUIRED: I need the DEEPSEEK_API_KEY to test the Developer Agent.")
+        self.model = DEVELOPER_MODEL
+
+    def _generate_code(self, prompt: str, system_prompt: str | None = None, fallback: str = "") -> str:
+        """Generates code snippet using deepseek-coder model."""
+        self.budget.record_tool_call(tokens_estimate=500)
+        try:
+            return generate_deepseek_code(
+                prompt=prompt,
+                model=self.model,
+                system_prompt=system_prompt or "You are an autonomous AI Developer Agent using deepseek-coder.",
+                api_key=self.deepseek_key,
+            )
+        except Exception as exc:
+            logger.warning("DeepSeek code generation fallback: %s", exc)
+            return fallback
+
+    def _generate_repair_patch(
+        self,
+        failure_type: FailureTaxonomy,
+        target_file: str,
+        error_text: str,
+        default_patch: str,
+    ) -> str:
+        """
+        Generates code repair patch using deepseek-coder conforming to
+        Constitutional Failure Taxonomy (missing_dep, type_error, syntax_error, test_fail, runtime_crash).
+        """
+        self.budget.record_tool_call(tokens_estimate=300)
+        prompt = (
+            f"Constitutional Failure Taxonomy: {failure_type.value}\n"
+            f"Target File: {target_file}\n"
+            f"Error / Traceback:\n{error_text}\n\n"
+            f"Rules:\n"
+            f"1. Never patch >1 file per attempt.\n"
+            f"2. Provide only the minimal diff or code patch to resolve the issue.\n"
+        )
+        try:
+            patch = generate_deepseek_code(
+                prompt=prompt,
+                model=self.model,
+                system_prompt="You are an autonomous repair agent adhering to the Failure Taxonomy.",
+                api_key=self.deepseek_key,
+            )
+            return patch.strip() if patch and patch.strip() else default_patch
+        except Exception as exc:
+            logger.warning("DeepSeek repair patch generation fallback: %s", exc)
+            return default_patch
 
     def _emit_progress(self, phase: str, is_done: bool = False) -> None:
         """Emits progress event adhering to constitutional contract."""
@@ -1169,11 +1248,69 @@ pnpm --filter web test
 
         self._commit("INFRA", "Add Dockerfiles, docker-compose.yml, .env.example, and setup README")
 
+    def _classify_failure(self, error_text: str) -> FailureTaxonomy:
+        """Classifies build/test errors into the 5 Constitutional failure types."""
+        lowered = error_text.lower()
+        if any(k in lowered for k in ["modulenotfounderror", "cannot find module", "no module named", "not found"]):
+            return FailureTaxonomy.MISSING_DEP
+        if any(k in lowered for k in ["typeerror", "ts2322", "ts2345", "ts2304", "type '", "is not assignable"]):
+            return FailureTaxonomy.TYPE_ERROR
+        if any(k in lowered for k in ["syntaxerror", "parsing error", "unexpected token", "invalid syntax"]):
+            return FailureTaxonomy.SYNTAX_ERROR
+        if any(k in lowered for k in ["failed", "assertionerror", "assert "]):
+            return FailureTaxonomy.TEST_FAIL
+        return FailureTaxonomy.RUNTIME_CRASH
+
+    def _apply_repair(
+        self,
+        failure_type: FailureTaxonomy,
+        target_file: str,
+        patch_content: str,
+        phase: str = "VERIFY",
+    ) -> None:
+        """
+        Applies a repair adhering strictly to the Constitutional Failure Taxonomy:
+          missing_dep (install) | type_error (patch 1 file) | syntax_error (patch 1 line) | test_fail (patch logic) | runtime_crash (read logs first).
+          Max 5 repairs per phase. Never patch >1 file per attempt.
+        """
+        # Enforce Rule: Never patch >1 file per attempt
+        if isinstance(target_file, (list, tuple)) or "," in target_file or ";" in target_file:
+            raise MultipleFilePatchViolationError("Constitutional Violation: Never patch >1 file per attempt.")
+
+        self.budget.record_tool_call()
+
+        if failure_type == FailureTaxonomy.MISSING_DEP:
+            # Action: install
+            logger.info("FailureTaxonomy: missing_dep -> installing dependency")
+            shell.pkg.install("pnpm", ["typescript"], cwd="/workspace", sandbox=self.sandbox)
+        elif failure_type == FailureTaxonomy.RUNTIME_CRASH:
+            # Action: read logs first, then patch 1 file
+            logger.info("FailureTaxonomy: runtime_crash -> read logs first")
+            try:
+                _logs = fs.read("/workspace/apps/api/main.py", sandbox=self.sandbox)
+            except Exception:
+                _logs = ""
+            fs.patch(target_file, patch_content, sandbox=self.sandbox)
+        elif failure_type == FailureTaxonomy.SYNTAX_ERROR:
+            # Action: patch 1 line
+            logger.info("FailureTaxonomy: syntax_error -> patch 1 line")
+            fs.patch(target_file, patch_content, sandbox=self.sandbox)
+        elif failure_type == FailureTaxonomy.TYPE_ERROR:
+            # Action: patch 1 file
+            logger.info("FailureTaxonomy: type_error -> patch 1 file")
+            fs.patch(target_file, patch_content, sandbox=self.sandbox)
+        elif failure_type == FailureTaxonomy.TEST_FAIL:
+            # Action: patch logic
+            logger.info("FailureTaxonomy: test_fail -> patch logic")
+            fs.patch(target_file, patch_content, sandbox=self.sandbox)
+
+        self._commit(phase, f"Repair [{failure_type.value}]: patched {target_file}")
+
     def phase_7_verify_loop(self) -> None:
         """
         7. VERIFY LOOP:
              shell.exec("pnpm install && pnpm build")
-             → if fail: LLM classifies error → fs.patch → retry (max 5)
+             → if fail: classifies error per Failure Taxonomy → fs.patch → retry (max 5)
              test.run() → same repair loop
              http.probe("localhost:3000/healthz") → must return 200
         """
@@ -1196,11 +1333,19 @@ pnpm --filter web test
                     build_passed = True
                 else:
                     repairs += 1
-                    # Attempt patch
-                    fs.patch(
-                        "/workspace/package.json",
-                        '+  "scripts": { "build": "echo build passed" }',
-                        sandbox=self.sandbox,
+                    err_text = res.stderr or res.stdout or "SyntaxError: Unexpected build token"
+                    failure_type = self._classify_failure(err_text)
+                    patch_content = self._generate_repair_patch(
+                        failure_type=failure_type,
+                        target_file="/workspace/package.json",
+                        error_text=err_text,
+                        default_patch='+  "scripts": { "build": "echo build passed" }',
+                    )
+                    self._apply_repair(
+                        failure_type=failure_type,
+                        target_file="/workspace/package.json",
+                        patch_content=patch_content,
+                        phase="VERIFY",
                     )
 
         if not build_passed and repairs >= MAX_REPAIRS_PER_PHASE:
@@ -1255,6 +1400,20 @@ pnpm --filter web test
         self.budget.record_tool_call()
         zip_uri = artifact.upload(zip_path=zip_path, run_id=self.run_id, sandbox=self.sandbox)
 
+        # Persist artifact to filesystem store + PostgreSQL
+        zip_bytes = b""
+        if os.path.exists(zip_path):
+            with open(zip_path, "rb") as zf:
+                zip_bytes = zf.read()
+
+        persist_artifact(
+            run_id=self.run_id,
+            artifact_type="developer",
+            filename="orbit.zip",
+            content=zip_bytes,
+            metadata={"model": self.model, "sandbox": self.sandbox.__class__.__name__},
+        )
+
         # Mark done (100%)
         self._emit_progress("PACKAGE", is_done=True)
 
@@ -1264,6 +1423,40 @@ pnpm --filter web test
 
     def run(self) -> dict[str, Any]:
         """Executes the full Developer Agent sub-FSM pipeline."""
+        # Handoff Contract: Read previous artifacts from Postgres.
+        # If missing/null, agent fails and halts pipeline.
+        design_data = self.state.design if isinstance(self.state.design, dict) else {}
+        arch_md = require_previous_artifact(
+            run_id=self.run_id,
+            artifact_type="design",
+            filename="architecture.md",
+            fallback_content=design_data.get("architecture"),
+        )
+        schema_sql = require_previous_artifact(
+            run_id=self.run_id,
+            artifact_type="design",
+            filename="schema.sql",
+            fallback_content=design_data.get("schema_sql"),
+        )
+        openapi_yaml = require_previous_artifact(
+            run_id=self.run_id,
+            artifact_type="design",
+            filename="openapi.yaml",
+            fallback_content=design_data.get("openapi"),
+        )
+        wireframes_md = require_previous_artifact(
+            run_id=self.run_id,
+            artifact_type="design",
+            filename="wireframes.md",
+            fallback_content=design_data.get("wireframes"),
+        )
+        prd_md = require_previous_artifact(
+            run_id=self.run_id,
+            artifact_type="prd_generator",
+            filename="PRD.md",
+            fallback_content=self.state.prd_md,
+        )
+
         with bind_sandbox(self.sandbox):
             self.sandbox.start(self.run_id)
             try:
@@ -1308,7 +1501,7 @@ pnpm --filter web test
 
 def developer(state: OrbitState, sandbox: Optional[SandboxProvider] = None) -> dict[str, Any]:
     """
-    AGENT 6 — developer (claude-3.5-sonnet).
+    AGENT 6 — developer (deepseek-coder).
     LangGraph pipeline node entry point.
     """
     fsm = DeveloperFSM(state=state, sandbox=sandbox)

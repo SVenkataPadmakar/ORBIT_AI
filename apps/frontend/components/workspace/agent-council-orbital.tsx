@@ -26,13 +26,14 @@ const AGENTS: AgentMeta[] = [
     { key: "vc_evaluation",     label: "Verification", role: "Risk",         icon: ShieldCheck,        color: "#10B981", angle: 300 },
 ];
 
-function summaryFor(key: AgentStage, output: PipelineOutputs[AgentStage]): string {
-    if (!output) return "";
-    if ("executive_summary" in output) return output.executive_summary;
-    if (key === "product_strategy" && "product_vision" in output) return output.product_vision;
-    if (key === "finance" && "pricing_strategy" in output) return output.pricing_strategy;
-    if (key === "pitch_deck" && "one_liner" in output) return output.one_liner;
-    if (key === "vc_evaluation" && "concerns" in output) return output.concerns[0] ?? "";
+function summaryFor(key: AgentStage, output: unknown): string {
+    if (!output || typeof output !== "object") return "";
+    const rec = output as Record<string, unknown>;
+    if ("executive_summary" in rec && typeof rec.executive_summary === "string") return rec.executive_summary;
+    if (key === "product_strategy" && "product_vision" in rec && typeof rec.product_vision === "string") return rec.product_vision;
+    if (key === "finance" && "pricing_strategy" in rec && typeof rec.pricing_strategy === "string") return rec.pricing_strategy;
+    if (key === "pitch_deck" && "one_liner" in rec && typeof rec.one_liner === "string") return rec.one_liner;
+    if (key === "vc_evaluation" && "concerns" in rec && Array.isArray(rec.concerns)) return String(rec.concerns[0] ?? "");
     return "";
 }
 

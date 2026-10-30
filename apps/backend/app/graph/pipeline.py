@@ -18,15 +18,11 @@ from app.graph.state import OrbitState
 logger = logging.getLogger("orbit.graph.pipeline")
 
 
-from app.agents.discovery_agents import (
-    feasibility,
-    market_analysis,
-    problem_discovery,
-)
-from app.agents.prd_design_agents import (
-    design,
-    prd_generator,
-)
+from app.agents.problem_discovery import problem_discovery
+from app.agents.market_analysis import market_analysis
+from app.agents.feasibility import feasibility
+from app.agents.prd_generator import prd_generator
+from app.agents.design import design
 
 
 

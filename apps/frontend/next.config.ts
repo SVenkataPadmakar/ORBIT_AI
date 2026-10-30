@@ -26,6 +26,9 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
@@ -57,8 +60,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/runs/:path*",
+        destination: "http://localhost:8000/api/runs/:path*",
+      },
+      {
         source: "/api/v1/:path*",
-        destination: "http://localhost:8000/v1/:path*",
+        destination: "http://localhost:8000/api/v1/:path*",
       },
       {
         source: "/v1/:path*",

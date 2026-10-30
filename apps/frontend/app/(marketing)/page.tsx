@@ -28,14 +28,7 @@ import { useFpsMonitor } from "@/hooks/useFpsMonitor";
 import { trackEvent } from "@/lib/analytics";
 
 export default function MarketingPage() {
-  // Feature flag check (Section 18): if flag is explicitly "false", render v3
-  const isV4Enabled = process.env.NEXT_PUBLIC_LANDING_V4 !== "false";
-
-  if (!isV4Enabled) {
-    return <LandingPageV3 />;
-  }
-
-  return <LandingPageV4 />;
+  return <LandingPageV3 />;
 }
 
 function LandingPageV4() {

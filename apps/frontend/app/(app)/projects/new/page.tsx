@@ -1,14 +1,15 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Bot, Check, ChevronRight,
-         LoaderCircle, Zap, Target, Lightbulb, Users, Wallet, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, Check,
+         LoaderCircle, Zap, Target, Lightbulb, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ApiError, projectsApi } from "@/lib/api/client";
 import { Brand } from "@/components/ui/core";
+import type { Project, ProjectCreate } from "@/types/api";
 
 const BUDGET_OPTIONS = ["Bootstrapped", "Under $25k", "$25k – $100k", "$100k – $500k", "$500k+"];
 
@@ -18,8 +19,6 @@ const STEPS = [
     { id: "audience",    label: "Audience",    icon: Users,     question: "Who feels this most?",       hint: "Describe the role, company type, and current behavior of your target customer." },
     { id: "constraints", label: "Constraints", icon: Wallet,    question: "What are your constraints?",  hint: "Market, budget, timing, and any non-negotiables." },
 ] as const;
-
-type StepId = typeof STEPS[number]["id"];
 
 const EXAMPLE_NAMES = ["Relay Health", "Orbit Finance", "Anchor Legal", "Beacon HR", "Surge Analytics"];
 const EXAMPLE_PROBLEMS = [
@@ -47,10 +46,20 @@ export default function NewProjectPage() {
         setTimeout(() => (inputRef.current as HTMLInputElement | null)?.focus(), 120);
     }, [step]);
 
-    const create = useMutation({
-        mutationFn: projectsApi.create,
-        onSuccess: (project) => {
+    const generateMutation = useMutation({
+        mutationFn: async (payload: ProjectCreate): Promise<Project> => {
+            const project = await projectsApi.create(payload);
+            try {
+                // Instantly kickoff the 7-agent pipeline with idea
+                await projectsApi.startPipeline(project.id, { idea: payload.idea_description });
+            } catch (err) {
+                console.warn("Pipeline start kickoff warning:", err);
+            }
+            return project;
+        },
+        onSuccess: (project: Project) => {
             client.invalidateQueries({ queryKey: ["projects"] });
+            // Instantly transition to workspace containing AgentPipeline
             router.push(`/projects/${project.id}`);
         },
         onError: (cause) => setError(cause instanceof ApiError ? cause.message : "The workspace could not be initialized."),
@@ -70,7 +79,7 @@ export default function NewProjectPage() {
 
     function submit() {
         setError(null);
-        create.mutate({
+        generateMutation.mutate({
             name: name.trim(),
             idea_description: idea.trim(),
             industry: industry.trim() || undefined,
@@ -262,21 +271,21 @@ export default function NewProjectPage() {
                             <button
                                 className="btn-primary"
                                 onClick={advance}
-                                disabled={!canAdvance || create.isPending}
+                                disabled={!canAdvance || generateMutation.isPending}
                                 style={{ height: "48px", paddingLeft: "24px", paddingRight: "24px" }}
                                 data-cursor="hover"
                             >
-                                {create.isPending ? (
+                                {generateMutation.isPending ? (
                                     <LoaderCircle className="size-4 animate-spin" />
                                 ) : step === STEPS.length - 1 ? (
                                     <Zap className="size-4" fill="white" />
                                 ) : (
                                     <ArrowRight className="size-4" />
                                 )}
-                                {create.isPending
-                                    ? "Initializing workspace..."
+                                {generateMutation.isPending
+                                    ? "Generating 7-Agent Pipeline..."
                                     : step === STEPS.length - 1
-                                    ? "Launch Orbit Idea"
+                                    ? "Generate"
                                     : "Continue"}
                             </button>
 

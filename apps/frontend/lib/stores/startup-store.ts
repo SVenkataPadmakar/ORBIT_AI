@@ -52,6 +52,31 @@ export interface SprintTaskItem {
     relatedFeatureId?: string;
 }
 
+export interface AgentProgress {
+    run_id: string;
+    agent: string;
+    agent_index: number;
+    status: "pending" | "running" | "done" | "failed" | string;
+    percent: number;
+    message: string;
+}
+
+export interface PipelineGateState {
+    isHalted: boolean;
+    reason: string | null;
+    failedAgent: string | null;
+}
+
+export const INDEX_TO_AGENT_KEY: Record<number, string> = {
+    1: "problem_discovery",
+    2: "market_analysis",
+    3: "feasibility",
+    4: "prd_generator",
+    5: "design",
+    6: "developer",
+    7: "risk_analysis",
+};
+
 export interface StartupMemoryState {
     // 1. Identity Memory
     id: string;
@@ -82,18 +107,26 @@ export interface StartupMemoryState {
     // 6. Decision Memory
     decisions: DecisionRecord[];
 
+    // 7. 7-Agent Real-time SSE State
+    agentProgress: Record<string, AgentProgress>;
+    pipelineGate: PipelineGateState;
+    activeRunId: string | null;
+
     // Actions
     setStartupIdentity: (name: string, idea: string) => void;
     updateProductMemory: (data: Partial<Pick<StartupMemoryState, "problem" | "valueProposition" | "personas" | "userStories" | "features" | "mvpScope">>) => void;
     addDecision: (decision: Omit<DecisionRecord, "id" | "timestamp">) => void;
     updateTaskStatus: (taskId: string, status: SprintTaskItem["status"]) => void;
     addFeature: (feature: Feature) => void;
+    updateAgentProgress: (item: AgentProgress) => void;
+    setPipelineGate: (gate: PipelineGateState) => void;
+    resetPipelineProgress: (runId?: string) => void;
     connectStream: (projectId: string) => () => void;
 }
 
 export const useStartupStore = create<StartupMemoryState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             id: "startup-1",
             name: "Relay Health",
             idea: "AI platform that automates customer support and operations handoffs for small healthcare teams.",
@@ -183,32 +216,128 @@ export const useStartupStore = create<StartupMemoryState>()(
                 ...s,
                 features: [...s.features, feature],
             })),
+
+            agentProgress: {},
+            pipelineGate: {
+                isHalted: false,
+                reason: null,
+                failedAgent: null,
+            },
+            activeRunId: null,
+
+            updateAgentProgress: (item: AgentProgress) =>
+                set((state) => {
+                    const prev = state.agentProgress[item.agent];
+                    // Shallow check to prevent unnecessary object reference and avoid full-page re-renders
+                    if (
+                        prev &&
+                        prev.status === item.status &&
+                        prev.percent === item.percent &&
+                        prev.message === item.message &&
+                        prev.run_id === item.run_id
+                    ) {
+                        return state;
+                    }
+
+                    const isFeasibilityFail =
+                        (item.agent === "feasibility" || item.agent_index === 3) &&
+                        (item.status === "failed" || item.status === "error");
+
+                    return {
+                        ...state,
+                        agentProgress: {
+                            ...state.agentProgress,
+                            [item.agent]: item,
+                        },
+                        pipelineGate: isFeasibilityFail
+                            ? {
+                                  isHalted: true,
+                                  reason: item.message || "Idea did not pass Feasibility.",
+                                  failedAgent: "feasibility",
+                              }
+                            : state.pipelineGate,
+                        activeRunId: item.run_id || state.activeRunId,
+                    };
+                }),
+
+            setPipelineGate: (gate: PipelineGateState) =>
+                set((s) => ({ ...s, pipelineGate: gate })),
+
+            resetPipelineProgress: (runId?: string) =>
+                set((s) => ({
+                    ...s,
+                    agentProgress: {},
+                    pipelineGate: { isHalted: false, reason: null, failedAgent: null },
+                    activeRunId: runId || null,
+                })),
+
             connectStream: (projectId: string) => {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/v1";
-                const eventSource = new EventSource(`${apiUrl}/projects/${projectId}/stream`);
-                
-                eventSource.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    if (data.type === "artifact_updated") {
-                        // Dynamically update the store based on artifact type
-                        // In a real implementation, this would map the API response payload
-                        // to the corresponding keys in StartupMemoryState.
+                if (!projectId || typeof window === "undefined" || typeof EventSource === "undefined") {
+                    return () => {};
+                }
+
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                const streamUrl = `${apiBase}/api/runs/${projectId}/stream`;
+
+                let eventSource: EventSource | null = null;
+                try {
+                    eventSource = new EventSource(streamUrl);
+                } catch (err) {
+                    console.warn("EventSource initialization fallback:", err);
+                    return () => {};
+                }
+
+                const handleMessage = (event: MessageEvent) => {
+                    try {
+                        if (!event.data) return;
+                        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+                        const rawAgent =
+                            data.agent ||
+                            INDEX_TO_AGENT_KEY[data.agent_index || data.phase_index] ||
+                            "";
+                        if (!rawAgent) return;
+
+                        const progressItem: AgentProgress = {
+                            run_id: String(data.run_id || projectId),
+                            agent: String(rawAgent),
+                            agent_index: Number(data.agent_index ?? data.phase_index ?? 1),
+                            status: String(data.status || "running"),
+                            percent: typeof data.percent === "number" ? data.percent : 0,
+                            message: String(data.message || ""),
+                        };
+
+                        get().updateAgentProgress(progressItem);
+                    } catch (err) {
+                        console.error("Failed to parse SSE event:", err);
                     }
                 };
 
-                eventSource.onerror = (error) => {
-                    console.error("SSE Error:", error);
-                    eventSource.close();
+                eventSource.onmessage = handleMessage;
+                eventSource.addEventListener("progress", handleMessage);
+                eventSource.addEventListener("admin_progress", handleMessage);
+
+                eventSource.onerror = () => {
+                    if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+                        eventSource.close();
+                    }
                 };
 
-                // Return cleanup function
                 return () => {
-                    eventSource.close();
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
                 };
             },
         }),
         {
             name: "forge-idea-startup-memory",
+            partialize: (state) => {
+                const rest = { ...state };
+                delete (rest as Record<string, unknown>).agentProgress;
+                delete (rest as Record<string, unknown>).pipelineGate;
+                return rest;
+            },
         },
     ),
 );
