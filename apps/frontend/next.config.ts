@@ -77,7 +77,11 @@ const nextConfig: NextConfig = {
     maxInactiveAge: 15 * 1000,
     pagesBufferLength: 2,
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
+    if (dev) {
+      // Disable filesystem packfile cache in dev to prevent RangeError: Array buffer allocation failed
+      config.cache = false;
+    }
     return config;
   },
 };
