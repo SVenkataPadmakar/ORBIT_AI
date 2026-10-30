@@ -4,11 +4,24 @@ import { AgentPipeline, CONSTITUTIONAL_7_STEPS } from "../AgentPipeline";
 import type { PipelineStatusResponse, PipelineOutputs, ConstitutionAgent } from "@/types/api";
 
 describe("AgentPipeline Component", () => {
-  it("renders all 7 constitutional agent steps in strict order", () => {
-    render(
+  it("renders only initial agent by default and reveals all 7 when initialAgentIndex=7", () => {
+    const { rerender } = render(
       <AgentPipeline
         projectId="proj-123"
         projectName="Orbit AI"
+      />
+    );
+
+    // Initial state: only Step 1 is rendered sequentially
+    expect(screen.getByText("Problem Discovery")).toBeInTheDocument();
+    expect(screen.queryByText("Market Analysis")).not.toBeInTheDocument();
+
+    // When initialAgentIndex=7, all 7 steps are rendered
+    rerender(
+      <AgentPipeline
+        projectId="proj-123"
+        projectName="Orbit AI"
+        initialAgentIndex={7}
       />
     );
 
@@ -114,6 +127,7 @@ describe("AgentPipeline Component", () => {
         pipelineStatus="failed"
         statusData={statusData}
         outputs={outputs}
+        initialAgentIndex={7}
       />
     );
 
@@ -130,7 +144,7 @@ describe("AgentPipeline Component", () => {
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
-  it("keeps Download Project Zip button disabled when Step 7 is not done", () => {
+  it("keeps Download Project Zip button hidden when Step 7 is not done", () => {
     render(
       <AgentPipeline
         projectId="proj-123"
@@ -138,10 +152,8 @@ describe("AgentPipeline Component", () => {
       />
     );
 
-    const downloadBtn = screen.getByRole("button", {
-      name: /Download project ZIP is disabled until Step 7 completes/i,
-    });
-    expect(downloadBtn).toBeDisabled();
+    // Download button must only be shown when currentAgentIndex === 7 and status is done
+    expect(screen.queryByText("Download Project Zip")).not.toBeInTheDocument();
   });
 
   it("activates massive Download Project Zip button when Step 7 is Done", () => {

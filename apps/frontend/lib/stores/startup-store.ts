@@ -59,6 +59,7 @@ export interface AgentProgress {
     status: "pending" | "running" | "done" | "failed" | string;
     percent: number;
     message: string;
+    log?: string | null;
 }
 
 export interface PipelineGateState {
@@ -107,10 +108,12 @@ export interface StartupMemoryState {
     // 6. Decision Memory
     decisions: DecisionRecord[];
 
-    // 7. 7-Agent Real-time SSE State
+    // 7. 7-Agent Real-time SSE State & Live Logs
     agentProgress: Record<string, AgentProgress>;
     pipelineGate: PipelineGateState;
     activeRunId: string | null;
+    terminalLogs: string[];
+    latestLog: string | null;
 
     // Actions
     setStartupIdentity: (name: string, idea: string) => void;
@@ -119,6 +122,8 @@ export interface StartupMemoryState {
     updateTaskStatus: (taskId: string, status: SprintTaskItem["status"]) => void;
     addFeature: (feature: Feature) => void;
     updateAgentProgress: (item: AgentProgress) => void;
+    appendTerminalLog: (log: string) => void;
+    clearTerminalLogs: () => void;
     setPipelineGate: (gate: PipelineGateState) => void;
     resetPipelineProgress: (runId?: string) => void;
     connectStream: (projectId: string) => () => void;
@@ -224,6 +229,22 @@ export const useStartupStore = create<StartupMemoryState>()(
                 failedAgent: null,
             },
             activeRunId: null,
+            terminalLogs: [],
+            latestLog: null,
+
+            appendTerminalLog: (log: string) =>
+                set((s) => ({
+                    ...s,
+                    latestLog: log,
+                    terminalLogs: [...s.terminalLogs, log],
+                })),
+
+            clearTerminalLogs: () =>
+                set((s) => ({
+                    ...s,
+                    terminalLogs: [],
+                    latestLog: null,
+                })),
 
             updateAgentProgress: (item: AgentProgress) =>
                 set((state) => {
@@ -234,7 +255,8 @@ export const useStartupStore = create<StartupMemoryState>()(
                         prev.status === item.status &&
                         prev.percent === item.percent &&
                         prev.message === item.message &&
-                        prev.run_id === item.run_id
+                        prev.run_id === item.run_id &&
+                        prev.log === item.log
                     ) {
                         return state;
                     }
@@ -269,6 +291,8 @@ export const useStartupStore = create<StartupMemoryState>()(
                     agentProgress: {},
                     pipelineGate: { isHalted: false, reason: null, failedAgent: null },
                     activeRunId: runId || null,
+                    terminalLogs: [],
+                    latestLog: null,
                 })),
 
             connectStream: (projectId: string) => {
@@ -291,7 +315,13 @@ export const useStartupStore = create<StartupMemoryState>()(
                         if (!event.data) return;
                         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
 
-                        // Exact backend JSON payload: { run_id, agent, percent, status }
+                        // 1. Process real-time live terminal log
+                        const logText = data.log ? String(data.log).trim() : null;
+                        if (logText) {
+                            get().appendTerminalLog(logText);
+                        }
+
+                        // Exact backend JSON payload: { run_id, agent, percent, status, log }
                         const agentKey =
                             data.agent ||
                             INDEX_TO_AGENT_KEY[data.agent_index || data.phase_index] ||
@@ -313,6 +343,7 @@ export const useStartupStore = create<StartupMemoryState>()(
                             status,
                             percent,
                             message: String(data.message || (status === "done" ? "Agent completed" : `Executing ${agentKey} (${percent}%)...`)),
+                            log: logText,
                         };
 
                         // Update Zustand state: increases the specific agent's percentage based on real backend events
@@ -346,6 +377,8 @@ export const useStartupStore = create<StartupMemoryState>()(
                 const rest = { ...state };
                 delete (rest as Record<string, unknown>).agentProgress;
                 delete (rest as Record<string, unknown>).pipelineGate;
+                delete (rest as Record<string, unknown>).terminalLogs;
+                delete (rest as Record<string, unknown>).latestLog;
                 return rest;
             },
         },

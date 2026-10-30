@@ -23,12 +23,11 @@ import {
   Archive,
   Play,
   Lock,
-  AlertTriangle,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { PipelineOutputs, PipelineStatusResponse, PipelineStatus } from "@/types/api";
 import { ArtifactViewer } from "./ArtifactViewer";
+import { LiveTerminal } from "./LiveTerminal";
 
 export type AgentStepStatus = "pending" | "running" | "done" | "failed";
 
@@ -154,6 +153,7 @@ export interface AgentPipelineProps {
   statusData?: PipelineStatusResponse | null;
   outputs?: PipelineOutputs;
   isStarting?: boolean;
+  initialAgentIndex?: number;
   onStartPipeline?: () => void;
   onDownloadZip?: () => void;
 }
@@ -165,10 +165,20 @@ export const AgentPipeline = memo(function AgentPipeline({
   statusData,
   outputs = {},
   isStarting = false,
+  initialAgentIndex,
   onStartPipeline,
   onDownloadZip,
 }: AgentPipelineProps) {
+  // ── Sequential State Machine: currentAgentIndex (default 1) ──
+  const [currentAgentIndex, setCurrentAgentIndex] = useState<number>(initialAgentIndex ?? 1);
   const [expandedStep, setExpandedStep] = useState<string | null>("problem_discovery");
+
+  // Keep currentAgentIndex synchronized if initialAgentIndex prop changes
+  useEffect(() => {
+    if (initialAgentIndex !== undefined) {
+      setCurrentAgentIndex(initialAgentIndex);
+    }
+  }, [initialAgentIndex]);
 
   // Real-time SSE Zustand store subscription
   const agentProgress = useStartupStore((s) => s.agentProgress);
@@ -301,10 +311,37 @@ export const AgentPipeline = memo(function AgentPipeline({
   const stepStatuses = useMemo(() => {
     return CONSTITUTIONAL_7_STEPS.map((step, idx) => ({
       key: step.key,
+      step: step.step,
       status: getStepStatus(step, idx),
       percent: getStepPercent(step, idx),
     }));
   }, [getStepStatus, getStepPercent]);
+
+  // Sequential Reveal Hook: Advance currentAgentIndex when current step finishes
+  useEffect(() => {
+    const currentStepDef = CONSTITUTIONAL_7_STEPS[currentAgentIndex - 1];
+    if (!currentStepDef) return;
+    const currentStatus = stepStatuses[currentAgentIndex - 1]?.status;
+
+    if (currentStatus === "done" && currentAgentIndex < 7) {
+      setCurrentAgentIndex((prev) => Math.min(7, Math.max(prev, currentAgentIndex + 1)));
+    }
+  }, [stepStatuses, currentAgentIndex]);
+
+  // Reconcile on load if historical run data already contains completed downstream stages
+  useEffect(() => {
+    if (initialAgentIndex !== undefined) return;
+    let highestIndex = 1;
+    for (let i = 0; i < stepStatuses.length; i++) {
+      if (stepStatuses[i]?.status === "done") {
+        highestIndex = Math.min(7, i + 2);
+      } else if (stepStatuses[i]?.status === "running") {
+        highestIndex = Math.max(highestIndex, i + 1);
+        break;
+      }
+    }
+    setCurrentAgentIndex((prev) => Math.max(prev, highestIndex));
+  }, [stepStatuses, initialAgentIndex]);
 
   const step7IsDone = stepStatuses[6]?.status === "done";
   const completedCount = stepStatuses.filter((s) => s.status === "done").length;
@@ -331,15 +368,6 @@ export const AgentPipeline = memo(function AgentPipeline({
       stepTitle,
       deliverableFilename,
     });
-  };
-
-  const handleDownload = () => {
-    if (!step7IsDone) return;
-    if (onDownloadZip) {
-      onDownloadZip();
-    } else {
-      window.open(`http://localhost:8000/api/runs/${runId}/download`, "_blank");
-    }
   };
 
   return (
@@ -425,7 +453,10 @@ export const AgentPipeline = memo(function AgentPipeline({
         )}
       </div>
 
-      {/* ── Vertical Timeline Stepper ── */}
+      {/* ── Cinematic Live Terminal Component ── */}
+      <LiveTerminal runId={runId} />
+
+      {/* ── Vertical Timeline Stepper with Sequential Reveal ── */}
       <div className="relative pl-6 sm:pl-10">
         {/* Continuous Connecting Vertical Spine Line */}
         <div
@@ -434,317 +465,322 @@ export const AgentPipeline = memo(function AgentPipeline({
         />
 
         <div className="space-y-5">
-          {CONSTITUTIONAL_7_STEPS.map((stepDef, index) => {
-            const status = stepStatuses[index]?.status || "pending";
-            const percent = stepStatuses[index]?.percent ?? 0;
-            const liveItem = agentProgress[stepDef.key];
-            const isExpanded = expandedStep === stepDef.key;
-            const Icon = stepDef.icon;
+          <AnimatePresence initial={false}>
+            {CONSTITUTIONAL_7_STEPS.map((stepDef, index) => {
+              // STRICT RULE: ONLY render an agent if its index is <= currentAgentIndex
+              if (stepDef.step > currentAgentIndex) {
+                return null;
+              }
 
-            // Feasibility Gate rule: if Step 3 failed, Steps 4-7 are grayed out and disabled
-            const isDisabledByGate = isFeasibilityFailed && index >= 3;
+              const status = stepStatuses[index]?.status || "pending";
+              const percent = stepStatuses[index]?.percent ?? 0;
+              const liveItem = agentProgress[stepDef.key];
+              const isExpanded = expandedStep === stepDef.key;
+              const Icon = stepDef.icon;
 
-            return (
-              <div key={stepDef.key} className="relative group">
-                {/* ── Timeline Node Indicator (Left Spine) ── */}
-                <div
-                  className={cn(
-                    "absolute -left-6 sm:-left-10 top-5 -translate-x-1/2 size-8 sm:size-9 rounded-full flex items-center justify-center text-xs font-mono font-bold transition-all z-10 select-none",
-                    isDisabledByGate
-                      ? "bg-zinc-950 text-zinc-600 border border-zinc-800"
-                      : status === "done"
-                      ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-300"
-                      : status === "running"
-                      ? cn("bg-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.7)] border border-purple-300", shouldAnimate && "animate-pulse")
-                      : status === "failed"
-                      ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] border border-red-300"
-                      : "bg-[#0A0A14] text-white/40 border border-white/20"
-                  )}
+              // Feasibility Gate rule: if Step 3 failed, Steps 4-7 are disabled
+              const isDisabledByGate = isFeasibilityFailed && index >= 3;
+
+              return (
+                <motion.div
+                  key={stepDef.key}
+                  initial={{ opacity: 0, y: 32, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative group"
                 >
-                  {isDisabledByGate ? (
-                    <Lock className="size-3.5 text-zinc-600" />
-                  ) : status === "done" ? (
-                    <Check className="size-4 stroke-[3]" />
-                  ) : status === "running" ? (
-                    <Loader2 className={cn("size-4 text-white", shouldAnimate && "animate-spin")} />
-                  ) : status === "failed" ? (
-                    <X className="size-4 stroke-[3]" />
-                  ) : (
-                    <span>{stepDef.step}</span>
-                  )}
-                </div>
-
-                {/* ── Step Card ── */}
-                <div
-                  className={cn(
-                    "rounded-2xl border transition-all duration-200 overflow-hidden",
-                    isDisabledByGate
-                      ? "border-zinc-800/40 bg-zinc-950/40 opacity-40 grayscale select-none cursor-not-allowed"
-                      : status === "running"
-                      ? "border-purple-500/60 bg-purple-950/20 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
-                      : status === "done"
-                      ? "border-emerald-500/30 bg-[#0A0D14]/90 hover:border-emerald-500/50"
-                      : status === "failed"
-                      ? "border-red-500/40 bg-red-950/20"
-                      : "border-white/[0.08] bg-[#07070F]/80 hover:border-white/15"
-                  )}
-                >
-                  {/* Step Header (Click to toggle expansion if not disabled) */}
+                  {/* ── Timeline Node Indicator (Left Spine) ── */}
                   <div
-                    onClick={() => {
-                      if (isDisabledByGate) return;
-                      setExpandedStep(isExpanded ? null : stepDef.key);
-                    }}
                     className={cn(
-                      "p-4 sm:p-5 flex items-start sm:items-center justify-between gap-4 select-none",
-                      isDisabledByGate ? "cursor-not-allowed" : "cursor-pointer"
+                      "absolute -left-6 sm:-left-10 top-5 -translate-x-1/2 size-8 sm:size-9 rounded-full flex items-center justify-center text-xs font-mono font-bold transition-all z-10 select-none",
+                      isDisabledByGate
+                        ? "bg-zinc-950 text-zinc-600 border border-zinc-800"
+                        : status === "done"
+                        ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] border border-emerald-300"
+                        : status === "running"
+                        ? cn("bg-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.7)] border border-purple-300", shouldAnimate && "animate-pulse")
+                        : status === "failed"
+                        ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] border border-red-300"
+                        : "bg-[#0A0A14] text-white/40 border border-white/20"
                     )}
                   >
-                    <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                      <div
-                        className="size-10 sm:size-11 rounded-xl flex items-center justify-center shrink-0 border"
-                        style={{
-                          backgroundColor: `${stepDef.color}15`,
-                          borderColor: `${stepDef.color}40`,
-                        }}
-                      >
-                        <Icon className="size-5" style={{ color: stepDef.color }} />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10px] font-mono tracking-widest text-white/40 uppercase">
-                            Step {stepDef.step}
-                          </span>
-                          <span className="text-white/20">·</span>
-                          <span className="text-xs font-mono font-medium text-purple-300">
-                            {stepDef.model}
-                          </span>
-                        </div>
-
-                        <h3 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5 truncate">
-                          {stepDef.name}
-                        </h3>
-
-                        <p className="text-xs text-white/50 hidden sm:block mt-0.5 truncate">
-                          {stepDef.role}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Step State Badge & Indicators */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      {/* Deliverable Badge */}
-                      <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 font-mono text-[11px] text-white/70">
-                        {stepDef.deliverableType === "zip" ? (
-                          <Archive className="size-3 text-emerald-400" />
-                        ) : stepDef.deliverableType === "code" ? (
-                          <FileCode className="size-3 text-purple-400" />
-                        ) : (
-                          <FileText className="size-3 text-cyan-400" />
-                        )}
-                        <span>{stepDef.deliverable.split(",")[0]}</span>
-                      </span>
-
-                      {/* State Pill: Pending (gray), Running (pulsing purple), Done (green check), Failed (red X) */}
-                      {isDisabledByGate ? (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-zinc-800 text-zinc-500 border border-zinc-700">
-                          Disabled
-                        </span>
-                      ) : status === "done" ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenViewer(stepDef.key, stepDef.name, stepDef.deliverable);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:border-purple-400/60 transition-all shadow-sm cursor-pointer active:scale-95"
-                            title="View Output"
-                          >
-                            <FileText className="size-3 text-purple-300" />
-                            <span>View Output</span>
-                          </button>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                            <Check className="size-3 stroke-[3]" />
-                            <span>Done</span>
-                          </span>
-                        </div>
-                      ) : status === "running" ? (
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40",
-                          shouldAnimate && "animate-pulse"
-                        )}>
-                          <span className={cn("size-1.5 rounded-full bg-purple-400", shouldAnimate && "animate-ping")} />
-                          <span>Running</span>
-                        </span>
-                      ) : status === "failed" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
-                          <X className="size-3 stroke-[3]" />
-                          <span>Failed</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-zinc-800/80 text-zinc-400 border border-zinc-700/60">
-                          <Clock className="size-3" />
-                          <span>Pending</span>
-                        </span>
-                      )}
-
-                      {/* Chevron */}
-                      {!isDisabledByGate && (
-                        <div className="text-white/40 hover:text-white transition-colors">
-                          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                        </div>
-                      )}
-                    </div>
+                    {isDisabledByGate ? (
+                      <Lock className="size-3.5 text-zinc-600" />
+                    ) : status === "done" ? (
+                      <Check className="size-4 stroke-[3]" />
+                    ) : status === "running" ? (
+                      <Loader2 className={cn("size-4 text-white", shouldAnimate && "animate-spin")} />
+                    ) : status === "failed" ? (
+                      <X className="size-4 stroke-[3]" />
+                    ) : (
+                      <span>{stepDef.step}</span>
+                    )}
                   </div>
 
-                  {/* Step Progress Bar with Framer Motion animate={{ width: percent + '%' }} */}
-                  {!isDisabledByGate && (
-                    <div className="px-4 sm:px-5 pb-3.5">
-                      <div className="flex items-center justify-between text-[11px] font-mono text-white/50 mb-1.5">
-                        <span className="truncate max-w-[80%] text-white/70">
-                          {liveItem?.message ||
-                            (status === "done"
-                              ? "Agent task verified & delivered"
-                              : status === "running"
-                              ? "Processing step..."
-                              : status === "failed"
-                              ? "Step execution failed"
-                              : "Queued")}
-                        </span>
-                        <span className="text-purple-300 font-semibold">{percent}%</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden p-0.5 border border-white/10">
-                        <motion.div
-                          initial={false}
-                          animate={{ width: isFeasibilityFailed && index >= 3 ? "0%" : `${percent}%` }}
-                          transition={shouldAnimate ? { duration: 0.35, ease: "easeInOut" } : { duration: 0 }}
-                          className={cn(
-                            "h-full rounded-full transition-colors",
-                            status === "failed"
-                              ? "bg-red-500"
-                              : status === "done"
-                              ? "bg-emerald-400"
-                              : "bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400"
-                          )}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Expandable Step Content */}
-                  <AnimatePresence>
-                    {isExpanded && !isDisabledByGate && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
-                        className="border-t border-white/[0.06] bg-black/30 p-4 sm:p-5 space-y-4"
-                      >
-                        <p className="text-xs sm:text-sm text-white/75 leading-relaxed">
-                          {stepDef.description}
-                        </p>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
-                          <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02]">
-                            <span className="text-[10px] text-white/40 uppercase block mb-1">
-                              Input Handoff Contract
-                            </span>
-                            <span className="text-white/80">{stepDef.inputContract}</span>
-                          </div>
-
-                          <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02]">
-                            <span className="text-[10px] text-white/40 uppercase block mb-1">
-                              Constitutional Deliverable
-                            </span>
-                            <span className="text-purple-300 font-semibold">{stepDef.deliverable}</span>
-                          </div>
+                  {/* ── Step Card ── */}
+                  <div
+                    className={cn(
+                      "rounded-2xl border transition-all duration-200 overflow-hidden",
+                      isDisabledByGate
+                        ? "border-zinc-800/40 bg-zinc-950/40 opacity-40 grayscale select-none cursor-not-allowed"
+                        : status === "running"
+                        ? "border-purple-500/60 bg-purple-950/20 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
+                        : status === "done"
+                        ? "border-emerald-500/30 bg-[#0A0D14]/90 hover:border-emerald-500/50"
+                        : status === "failed"
+                        ? "border-red-500/40 bg-red-950/20"
+                        : "border-white/[0.08] bg-[#07070F]/80 hover:border-white/15"
+                    )}
+                  >
+                    {/* Step Header (Click to toggle expansion if not disabled) */}
+                    <div
+                      onClick={() => {
+                        if (isDisabledByGate) return;
+                        setExpandedStep(isExpanded ? null : stepDef.key);
+                      }}
+                      className={cn(
+                        "p-4 sm:p-5 flex items-start sm:items-center justify-between gap-4 select-none",
+                        isDisabledByGate ? "cursor-not-allowed" : "cursor-pointer"
+                      )}
+                    >
+                      <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                        <div
+                          className="size-10 sm:size-11 rounded-xl flex items-center justify-center shrink-0 border"
+                          style={{
+                            backgroundColor: `${stepDef.color}15`,
+                            borderColor: `${stepDef.color}40`,
+                          }}
+                        >
+                          <Icon className="size-5" style={{ color: stepDef.color }} />
                         </div>
 
-                        {/* Step 3: Feasibility Gate Breakdown */}
-                        {stepDef.key === "feasibility" && (
-                          <div
-                            className={cn(
-                              "p-3.5 rounded-xl border text-xs font-mono space-y-2",
-                              isFeasibilityFailed
-                                ? "border-red-500/40 bg-red-950/30 text-red-200"
-                                : feasibilityOutput
-                                ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200"
-                                : "border-amber-500/30 bg-amber-500/10 text-amber-200"
-                            )}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold flex items-center gap-1.5">
-                                <ShieldAlert className="size-4" />
-                                Constitutional Feasibility Gate
-                              </span>
-                              {feasibilityOutput?.score !== undefined && (
-                                <span className="px-2 py-0.5 rounded font-bold bg-white/10">
-                                  Score: {feasibilityOutput.score} / 100 (Threshold: 80)
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs leading-relaxed opacity-90">
-                              Requires a minimum 80-point viability score across Market Size, Differentiation,
-                              Timing, and Execution Complexity to proceed to Step 4 (PRD Generator).
-                            </p>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-mono tracking-widest text-white/40 uppercase">
+                              Step {stepDef.step}
+                            </span>
+                            <span className="text-white/20">·</span>
+                            <span className="text-xs font-mono font-medium text-purple-300">
+                              {stepDef.model}
+                            </span>
+                          </div>
+
+                          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5 truncate">
+                            {stepDef.name}
+                          </h3>
+
+                          <p className="text-xs text-white/50 hidden sm:block mt-0.5 truncate">
+                            {stepDef.role}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Step State Badge & Indicators */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Deliverable Badge */}
+                        <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 font-mono text-[11px] text-white/70">
+                          {stepDef.deliverableType === "zip" ? (
+                            <Archive className="size-3 text-emerald-400" />
+                          ) : stepDef.deliverableType === "code" ? (
+                            <FileCode className="size-3 text-purple-400" />
+                          ) : (
+                            <FileText className="size-3 text-cyan-400" />
+                          )}
+                          <span>{stepDef.deliverable.split(",")[0]}</span>
+                        </span>
+
+                        {/* State Pill: Pending (gray), Running (pulsing purple), Done (green check), Failed (red X) */}
+                        {isDisabledByGate ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-zinc-800 text-zinc-500 border border-zinc-700">
+                            Disabled
+                          </span>
+                        ) : status === "done" ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenViewer(stepDef.key, stepDef.name, stepDef.deliverable);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:border-purple-400/60 transition-all shadow-sm cursor-pointer active:scale-95"
+                              title="View Output"
+                            >
+                              <FileText className="size-3 text-purple-300" />
+                              <span>View Output</span>
+                            </button>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              <Check className="size-3 stroke-[3]" />
+                              <span>Done</span>
+                            </span>
+                          </div>
+                        ) : status === "running" ? (
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40",
+                            shouldAnimate && "animate-pulse"
+                          )}>
+                            <span className={cn("size-1.5 rounded-full bg-purple-400", shouldAnimate && "animate-ping")} />
+                            <span>Running</span>
+                          </span>
+                        ) : status === "failed" ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
+                            <X className="size-3 stroke-[3]" />
+                            <span>Failed</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-zinc-800/80 text-zinc-400 border border-zinc-700/60">
+                            <Clock className="size-3" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+
+                        {/* Chevron */}
+                        {!isDisabledByGate && (
+                          <div className="text-white/40 hover:text-white transition-colors">
+                            {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                           </div>
                         )}
-                      </motion.div>
+                      </div>
+                    </div>
+
+                    {/* Step Progress Bar */}
+                    {!isDisabledByGate && (
+                      <div className="px-4 sm:px-5 pb-3.5">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-white/50 mb-1.5">
+                          <span className="truncate max-w-[80%] text-white/70">
+                            {liveItem?.message ||
+                              (status === "done"
+                                ? "Agent task verified & delivered"
+                                : status === "running"
+                                ? "Processing step..."
+                                : status === "failed"
+                                ? "Step execution failed"
+                                : "Queued")}
+                          </span>
+                          <span className="text-purple-300 font-semibold">{percent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden p-0.5 border border-white/10">
+                          <motion.div
+                            initial={false}
+                            animate={{ width: isFeasibilityFailed && index >= 3 ? "0%" : `${percent}%` }}
+                            transition={shouldAnimate ? { duration: 0.35, ease: "easeInOut" } : { duration: 0 }}
+                            className={cn(
+                              "h-full rounded-full transition-colors",
+                              status === "failed"
+                                ? "bg-red-500"
+                                : status === "done"
+                                ? "bg-emerald-400"
+                                : "bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400"
+                            )}
+                          />
+                        </div>
+                      </div>
                     )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            );
-          })}
+
+                    {/* Expandable Step Content */}
+                    <AnimatePresence>
+                      {isExpanded && !isDisabledByGate && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.25, ease: "easeInOut" }}
+                          className="border-t border-white/[0.06] bg-black/30 p-4 sm:p-5 space-y-4"
+                        >
+                          <p className="text-xs sm:text-sm text-white/75 leading-relaxed">
+                            {stepDef.description}
+                          </p>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                            <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02]">
+                              <span className="text-[10px] text-white/40 uppercase block mb-1">
+                                Input Handoff Contract
+                              </span>
+                              <span className="text-white/80">{stepDef.inputContract}</span>
+                            </div>
+
+                            <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02]">
+                              <span className="text-[10px] text-white/40 uppercase block mb-1">
+                                Constitutional Deliverable
+                              </span>
+                              <span className="text-purple-300 font-semibold">{stepDef.deliverable}</span>
+                            </div>
+                          </div>
+
+                          {/* Step 3: Feasibility Gate Breakdown */}
+                          {stepDef.key === "feasibility" && (
+                            <div
+                              className={cn(
+                                "p-3.5 rounded-xl border text-xs font-mono space-y-2",
+                                isFeasibilityFailed
+                                  ? "border-red-500/40 bg-red-950/30 text-red-200"
+                                  : feasibilityOutput
+                                  ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200"
+                                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold flex items-center gap-1.5">
+                                  <ShieldAlert className="size-4" />
+                                  Constitutional Feasibility Gate
+                                </span>
+                                {feasibilityOutput?.score !== undefined && (
+                                  <span className="px-2 py-0.5 rounded font-bold bg-white/10">
+                                    Score: {feasibilityOutput.score} / 100 (Threshold: 80)
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs leading-relaxed opacity-90">
+                                Requires a minimum 80-point viability score across Market Size, Differentiation,
+                                Timing, and Execution Complexity to proceed to Step 4 (PRD Generator).
+                              </p>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* ── Massive Download Button at Bottom ── */}
-      <div className="pt-4">
-        {step7IsDone ? (
-          <a
-            role="button"
-            href={`http://localhost:8000/api/runs/${runId}/download`}
-            download="orbit.zip"
-            onClick={(e) => {
-              if (onDownloadZip) {
-                onDownloadZip();
-              }
-            }}
-            className="w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl no-underline bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black shadow-[0_0_35px_rgba(16,185,129,0.45)] cursor-pointer transform hover:scale-[1.01] active:scale-[0.99]"
-            aria-label="Download complete project ZIP"
+      {/* ── Download Button Fix: Only show when currentAgentIndex === 7 and status is done ── */}
+      <AnimatePresence>
+        {currentAgentIndex === 7 && step7IsDone && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="pt-4"
           >
-            <div className="flex items-center gap-3">
-              <Download className="size-6 shrink-0" />
-              <span className="tracking-wide">Download Project Zip</span>
-            </div>
+            <a
+              role="button"
+              href={`http://localhost:8000/api/runs/${runId}/download`}
+              download="orbit.zip"
+              onClick={(e) => {
+                if (onDownloadZip) {
+                  onDownloadZip();
+                }
+              }}
+              className="w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl no-underline bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black shadow-[0_0_35px_rgba(16,185,129,0.45)] cursor-pointer transform hover:scale-[1.01] active:scale-[0.99]"
+              aria-label="Download complete project ZIP"
+            >
+              <div className="flex items-center gap-3">
+                <Download className="size-6 shrink-0" />
+                <span className="tracking-wide">Download Project Zip</span>
+              </div>
 
-            <span className="text-xs font-mono font-medium text-black/70 bg-black/10 px-2.5 py-1 rounded-full">
-              Full Stack Scaffolding + All 7 Agent Deliverables
-            </span>
-          </a>
-        ) : (
-          <button
-            disabled
-            className="w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl bg-zinc-900/80 border border-white/10 text-zinc-500 cursor-not-allowed opacity-50"
-            aria-label="Download project ZIP is disabled until Step 7 completes"
-          >
-            <div className="flex items-center gap-3">
-              <Download className="size-6 shrink-0" />
-              <span className="tracking-wide">Download Project Zip (Awaiting Step 7)</span>
-            </div>
-          </button>
+              <span className="text-xs font-mono font-medium text-black/70 bg-black/10 px-2.5 py-1 rounded-full">
+                Full Stack Scaffolding + All 7 Agent Deliverables
+              </span>
+            </a>
+          </motion.div>
         )}
-
-        {!step7IsDone && (
-          <p className="text-center text-xs font-mono text-zinc-500 mt-2">
-            The complete project package (.zip) unlocks automatically once Step 7 (Risk Analysis) completes.
-          </p>
-        )}
-      </div>
+      </AnimatePresence>
 
       {/* ── Slide-out Artifact Viewer Modal ── */}
       <ArtifactViewer
