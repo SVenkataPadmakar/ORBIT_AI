@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useCallback, useMemo, useEffect } from "react";
+import { memo, useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStartupStore } from "@/lib/stores/startup-store";
 import {
@@ -173,6 +173,9 @@ export const AgentPipeline = memo(function AgentPipeline({
   const [currentAgentIndex, setCurrentAgentIndex] = useState<number>(initialAgentIndex ?? 1);
   const [expandedStep, setExpandedStep] = useState<string | null>("problem_discovery");
 
+  // DOM ref for the currently active agent card for smooth auto-scrolling
+  const activeAgentRef = useRef<HTMLDivElement | null>(null);
+
   // Keep currentAgentIndex synchronized if initialAgentIndex prop changes
   useEffect(() => {
     if (initialAgentIndex !== undefined) {
@@ -317,7 +320,8 @@ export const AgentPipeline = memo(function AgentPipeline({
     }));
   }, [getStepStatus, getStepPercent]);
 
-  // Sequential Reveal Hook: Advance currentAgentIndex when current step finishes
+  // Sequential Reveal & Smooth Auto-Scroll Hook:
+  // Advance currentAgentIndex when current step finishes and auto-scroll to the new active agent
   useEffect(() => {
     const currentStepDef = CONSTITUTIONAL_7_STEPS[currentAgentIndex - 1];
     if (!currentStepDef) return;
@@ -326,7 +330,18 @@ export const AgentPipeline = memo(function AgentPipeline({
     if (currentStatus === "done" && currentAgentIndex < 7) {
       setCurrentAgentIndex((prev) => Math.min(7, Math.max(prev, currentAgentIndex + 1)));
     }
+
+    // Auto-scroll so the UI automatically follows the new agent as it appears
+    activeAgentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [stepStatuses, currentAgentIndex]);
+
+  // Ensure active agent is smoothly centered whenever currentAgentIndex transitions
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      activeAgentRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [currentAgentIndex]);
 
   // Reconcile on load if historical run data already contains completed downstream stages
   useEffect(() => {
@@ -454,7 +469,7 @@ export const AgentPipeline = memo(function AgentPipeline({
       </div>
 
       {/* ── Cinematic Live Terminal Component ── */}
-      <LiveTerminal runId={runId} />
+      <LiveTerminal runId={runId} isDone={step7IsDone} />
 
       {/* ── Vertical Timeline Stepper with Sequential Reveal ── */}
       <div className="relative pl-6 sm:pl-10">
@@ -472,6 +487,7 @@ export const AgentPipeline = memo(function AgentPipeline({
                 return null;
               }
 
+              const isActive = stepDef.step === currentAgentIndex;
               const status = stepStatuses[index]?.status || "pending";
               const percent = stepStatuses[index]?.percent ?? 0;
               const liveItem = agentProgress[stepDef.key];
@@ -484,6 +500,7 @@ export const AgentPipeline = memo(function AgentPipeline({
               return (
                 <motion.div
                   key={stepDef.key}
+                  ref={isActive ? activeAgentRef : null}
                   initial={{ opacity: 0, y: 32, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -20, scale: 0.98 }}
@@ -508,7 +525,13 @@ export const AgentPipeline = memo(function AgentPipeline({
                     {isDisabledByGate ? (
                       <Lock className="size-3.5 text-zinc-600" />
                     ) : status === "done" ? (
-                      <Check className="size-4 stroke-[3]" />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                      >
+                        <Check className="size-4 stroke-[3]" />
+                      </motion.div>
                     ) : status === "running" ? (
                       <Loader2 className={cn("size-4 text-white", shouldAnimate && "animate-spin")} />
                     ) : status === "failed" ? (
@@ -518,14 +541,32 @@ export const AgentPipeline = memo(function AgentPipeline({
                     )}
                   </div>
 
-                  {/* ── Step Card ── */}
-                  <div
+                  {/* ── Step Card with Pulsing Glow for Active Running Agent ── */}
+                  <motion.div
+                    animate={
+                      status === "running" && shouldAnimate
+                        ? {
+                            boxShadow: [
+                              "0 0 0px #7C5CFF",
+                              "0 0 20px #7C5CFF",
+                              "0 0 0px #7C5CFF",
+                            ],
+                          }
+                        : {
+                            boxShadow: "0 0 0px rgba(0, 0, 0, 0)",
+                          }
+                    }
+                    transition={
+                      status === "running" && shouldAnimate
+                        ? { duration: 2, repeat: Infinity, ease: "easeInOut" }
+                        : { duration: 0.35, ease: "easeOut" }
+                    }
                     className={cn(
                       "rounded-2xl border transition-all duration-200 overflow-hidden",
                       isDisabledByGate
                         ? "border-zinc-800/40 bg-zinc-950/40 opacity-40 grayscale select-none cursor-not-allowed"
                         : status === "running"
-                        ? "border-purple-500/60 bg-purple-950/20 shadow-[0_0_30px_rgba(168,85,247,0.2)]"
+                        ? "border-purple-500/70 bg-purple-950/25"
                         : status === "done"
                         ? "border-emerald-500/30 bg-[#0A0D14]/90 hover:border-emerald-500/50"
                         : status === "failed"
@@ -609,10 +650,15 @@ export const AgentPipeline = memo(function AgentPipeline({
                               <FileText className="size-3 text-purple-300" />
                               <span>View Output</span>
                             </button>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <motion.span
+                              initial={{ opacity: 0, scale: 0.85 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.35, ease: "easeOut" }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                            >
                               <Check className="size-3 stroke-[3]" />
                               <span>Done</span>
-                            </span>
+                            </motion.span>
                           </div>
                         ) : status === "running" ? (
                           <span className={cn(
@@ -739,7 +785,7 @@ export const AgentPipeline = memo(function AgentPipeline({
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </div>
+                  </motion.div>
                 </motion.div>
               );
             })}

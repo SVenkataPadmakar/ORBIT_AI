@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, memo } from "react";
+import { motion } from "framer-motion";
 import { Terminal, Copy, Check, Trash2, Maximize2, Minimize2 } from "lucide-react";
 import { useStartupStore } from "@/lib/stores/startup-store";
 import { cn } from "@/lib/utils/cn";
@@ -9,18 +10,27 @@ export interface LiveTerminalProps {
   runId?: string;
   className?: string;
   defaultHeight?: string;
+  isDone?: boolean;
 }
 
 export const LiveTerminal = memo(function LiveTerminal({
   runId,
   className,
   defaultHeight = "max-h-64",
+  isDone = false,
 }: LiveTerminalProps) {
   const terminalLogs = useStartupStore((s) => s.terminalLogs);
   const clearTerminalLogs = useStartupStore((s) => s.clearTerminalLogs);
+  const agentProgress = useStartupStore((s) => s.agentProgress);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Determine if pipeline status is done
+  const step7Progress = agentProgress["risk_analysis"] || agentProgress["developer"];
+  const isCompletedFromStore =
+    step7Progress && (step7Progress.status === "done" || step7Progress.percent >= 100);
+  const isTerminalDone = Boolean(isDone || isCompletedFromStore);
 
   // Auto-scroll to bottom whenever new logs arrive
   useEffect(() => {
@@ -63,9 +73,21 @@ export const LiveTerminal = memo(function LiveTerminal({
 
         <div className="flex items-center gap-2">
           {/* Live indicator badge */}
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-mono font-medium text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>STREAMING</span>
+          <div
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-mono font-medium transition-colors",
+              isTerminalDone
+                ? "bg-zinc-800/60 border-zinc-700/60 text-zinc-400"
+                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            )}
+          >
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                isTerminalDone ? "bg-zinc-500" : "bg-emerald-400 animate-pulse"
+              )}
+            />
+            <span>{isTerminalDone ? "COMPLETED" : "STREAMING"}</span>
           </div>
 
           {/* Copy Logs Button */}
@@ -103,7 +125,7 @@ export const LiveTerminal = memo(function LiveTerminal({
         </div>
       </div>
 
-      {/* ── Terminal Scrolling Feed ── */}
+      {/* ── Terminal Scrolling Feed with Typewriter Slide-In ── */}
       <div
         className={cn(
           "p-4 overflow-y-auto space-y-1 text-xs select-text scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent leading-relaxed",
@@ -121,8 +143,11 @@ export const LiveTerminal = memo(function LiveTerminal({
             const isPackage = /zip|download|deliverable/i.test(log);
 
             return (
-              <div
-                key={idx}
+              <motion.div
+                key={`${idx}-${log.slice(0, 20)}`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
                 className={cn(
                   "flex items-start gap-2 font-mono break-all",
                   isError
@@ -136,15 +161,24 @@ export const LiveTerminal = memo(function LiveTerminal({
               >
                 <span className="text-zinc-600 select-none shrink-0">&gt;</span>
                 <span className="flex-1">{log}</span>
-              </div>
+              </motion.div>
             );
           })
         )}
 
-        {/* Pulsing Active Terminal Prompt Cursor */}
+        {/* Terminal Prompt Cursor: Stops blinking when status === "done" */}
         <div className="flex items-center gap-1.5 text-green-400 pt-1">
           <span className="text-zinc-600 select-none">&gt;</span>
-          <span className="size-2 bg-green-400 animate-pulse" />
+          <span
+            className={cn(
+              "font-bold text-sm select-none",
+              isTerminalDone
+                ? "text-zinc-600"
+                : "text-green-400 animate-pulse"
+            )}
+          >
+            _
+          </span>
         </div>
 
         <div ref={bottomRef} />
