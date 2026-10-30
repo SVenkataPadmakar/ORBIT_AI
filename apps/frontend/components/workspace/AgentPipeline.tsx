@@ -308,14 +308,15 @@ export const AgentPipeline = memo(function AgentPipeline({
   const step7IsDone = stepStatuses[6]?.status === "done";
   const completedCount = stepStatuses.filter((s) => s.status === "done").length;
   const progressPercent = Math.round((completedCount / 7) * 100);
+  const activeRunId = useStartupStore((s) => s.activeRunId);
+  const runId = activeRunId || statusData?.pipeline_run_id || projectId || "run-latest";
 
   const handleDownload = () => {
     if (!step7IsDone) return;
     if (onDownloadZip) {
       onDownloadZip();
     } else {
-      const runId = statusData?.pipeline_run_id || "run-latest";
-      window.open(`http://localhost:8000/api/runs/${runId}/download/orbit.zip`, "_blank");
+      window.open(`http://localhost:8000/api/runs/${runId}/download`, "_blank");
     }
   };
 
@@ -667,34 +668,40 @@ export const AgentPipeline = memo(function AgentPipeline({
 
       {/* ── Massive Download Button at Bottom ── */}
       <div className="pt-4">
-        <button
-          onClick={handleDownload}
-          disabled={!step7IsDone}
-          className={cn(
-            "w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl",
-            step7IsDone
-              ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black shadow-[0_0_35px_rgba(16,185,129,0.45)] cursor-pointer transform hover:scale-[1.01] active:scale-[0.99]"
-              : "bg-zinc-900/80 border border-white/10 text-zinc-500 cursor-not-allowed opacity-50"
-          )}
-          aria-label={
-            step7IsDone
-              ? "Download complete project ZIP"
-              : "Download project ZIP is disabled until Step 7 completes"
-          }
-        >
-          <div className="flex items-center gap-3">
-            <Download className="size-6 shrink-0" />
-            <span className="tracking-wide">
-              {step7IsDone ? "Download Project Zip" : "Download Project Zip (Awaiting Step 7)"}
-            </span>
-          </div>
+        {step7IsDone ? (
+          <a
+            role="button"
+            href={`http://localhost:8000/api/runs/${runId}/download`}
+            download="orbit.zip"
+            onClick={(e) => {
+              if (onDownloadZip) {
+                onDownloadZip();
+              }
+            }}
+            className="w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl no-underline bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black shadow-[0_0_35px_rgba(16,185,129,0.45)] cursor-pointer transform hover:scale-[1.01] active:scale-[0.99]"
+            aria-label="Download complete project ZIP"
+          >
+            <div className="flex items-center gap-3">
+              <Download className="size-6 shrink-0" />
+              <span className="tracking-wide">Download Project Zip</span>
+            </div>
 
-          {step7IsDone && (
             <span className="text-xs font-mono font-medium text-black/70 bg-black/10 px-2.5 py-1 rounded-full">
               Full Stack Scaffolding + All 7 Agent Deliverables
             </span>
-          )}
-        </button>
+          </a>
+        ) : (
+          <button
+            disabled
+            className="w-full py-5 px-8 rounded-2xl text-base sm:text-lg font-bold flex flex-col sm:flex-row items-center justify-center gap-3 transition-all select-none shadow-2xl bg-zinc-900/80 border border-white/10 text-zinc-500 cursor-not-allowed opacity-50"
+            aria-label="Download project ZIP is disabled until Step 7 completes"
+          >
+            <div className="flex items-center gap-3">
+              <Download className="size-6 shrink-0" />
+              <span className="tracking-wide">Download Project Zip (Awaiting Step 7)</span>
+            </div>
+          </button>
+        )}
 
         {!step7IsDone && (
           <p className="text-center text-xs font-mono text-zinc-500 mt-2">

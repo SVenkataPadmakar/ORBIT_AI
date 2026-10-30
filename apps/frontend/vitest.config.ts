@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    setupFiles: [path.resolve(process.cwd(), "vitest.setup.ts")],
+    setupFiles: ["./vitest.setup.ts"],
     globals: true,
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
     pool: "threads",
@@ -18,6 +18,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: { "@": path.resolve(process.cwd(), ".") },
+    alias: { "@": path.resolve(__dirname, ".") },
   },
 });

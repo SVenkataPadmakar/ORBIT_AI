@@ -276,14 +276,13 @@ export const useStartupStore = create<StartupMemoryState>()(
                     return () => {};
                 }
 
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-                const streamUrl = `${apiBase}/api/runs/${projectId}/stream`;
+                const streamUrl = `http://localhost:8000/api/runs/${projectId}/stream`;
 
                 let eventSource: EventSource | null = null;
                 try {
                     eventSource = new EventSource(streamUrl);
                 } catch (err) {
-                    console.warn("EventSource initialization fallback:", err);
+                    console.warn("EventSource initialization error:", err);
                     return () => {};
                 }
 
@@ -291,21 +290,32 @@ export const useStartupStore = create<StartupMemoryState>()(
                     try {
                         if (!event.data) return;
                         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-                        const rawAgent =
+
+                        // Exact backend JSON payload: { run_id, agent, percent, status }
+                        const agentKey =
                             data.agent ||
                             INDEX_TO_AGENT_KEY[data.agent_index || data.phase_index] ||
                             "";
-                        if (!rawAgent) return;
+                        if (!agentKey) return;
+
+                        const percent = typeof data.percent === "number" ? data.percent : Number(data.percent || 0);
+                        const status = String(data.status || (percent >= 100 ? "done" : "running"));
+                        const runId = String(data.run_id || projectId);
 
                         const progressItem: AgentProgress = {
-                            run_id: String(data.run_id || projectId),
-                            agent: String(rawAgent),
-                            agent_index: Number(data.agent_index ?? data.phase_index ?? 1),
-                            status: String(data.status || "running"),
-                            percent: typeof data.percent === "number" ? data.percent : 0,
-                            message: String(data.message || ""),
+                            run_id: runId,
+                            agent: String(agentKey),
+                            agent_index: Number(
+                                data.agent_index ??
+                                Object.entries(INDEX_TO_AGENT_KEY).find(([_, v]) => v === agentKey)?.[0] ??
+                                1
+                            ),
+                            status,
+                            percent,
+                            message: String(data.message || (status === "done" ? "Agent completed" : `Executing ${agentKey} (${percent}%)...`)),
                         };
 
+                        // Update Zustand state: increases the specific agent's percentage based on real backend events
                         get().updateAgentProgress(progressItem);
                     } catch (err) {
                         console.error("Failed to parse SSE event:", err);
