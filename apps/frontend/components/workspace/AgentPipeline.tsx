@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { PipelineOutputs, PipelineStatusResponse, PipelineStatus } from "@/types/api";
+import { ArtifactViewer } from "./ArtifactViewer";
 
 export type AgentStepStatus = "pending" | "running" | "done" | "failed";
 
@@ -311,6 +312,27 @@ export const AgentPipeline = memo(function AgentPipeline({
   const activeRunId = useStartupStore((s) => s.activeRunId);
   const runId = activeRunId || statusData?.pipeline_run_id || projectId || "run-latest";
 
+  const [viewerState, setViewerState] = useState<{
+    isOpen: boolean;
+    agentName: string;
+    stepTitle: string;
+    deliverableFilename: string;
+  }>({
+    isOpen: false,
+    agentName: "",
+    stepTitle: "",
+    deliverableFilename: "",
+  });
+
+  const handleOpenViewer = (agentName: string, stepTitle: string, deliverableFilename: string) => {
+    setViewerState({
+      isOpen: true,
+      agentName,
+      stepTitle,
+      deliverableFilename,
+    });
+  };
+
   const handleDownload = () => {
     if (!step7IsDone) return;
     if (onDownloadZip) {
@@ -530,10 +552,24 @@ export const AgentPipeline = memo(function AgentPipeline({
                           Disabled
                         </span>
                       ) : status === "done" ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          <Check className="size-3 stroke-[3]" />
-                          <span>Done</span>
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenViewer(stepDef.key, stepDef.name, stepDef.deliverable);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:border-purple-400/60 transition-all shadow-sm cursor-pointer active:scale-95"
+                            title="View Output"
+                          >
+                            <FileText className="size-3 text-purple-300" />
+                            <span>View Output</span>
+                          </button>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                            <Check className="size-3 stroke-[3]" />
+                            <span>Done</span>
+                          </span>
+                        </div>
                       ) : status === "running" ? (
                         <span className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono uppercase font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40",
@@ -709,6 +745,16 @@ export const AgentPipeline = memo(function AgentPipeline({
           </p>
         )}
       </div>
+
+      {/* ── Slide-out Artifact Viewer Modal ── */}
+      <ArtifactViewer
+        isOpen={viewerState.isOpen}
+        onClose={() => setViewerState((prev) => ({ ...prev, isOpen: false }))}
+        runId={runId}
+        agentName={viewerState.agentName}
+        stepTitle={viewerState.stepTitle}
+        deliverableFilename={viewerState.deliverableFilename}
+      />
     </div>
   );
 });

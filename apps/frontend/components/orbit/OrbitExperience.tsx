@@ -8,7 +8,10 @@ import dynamic from "next/dynamic";
 
 const OrbitUniverseCanvas = dynamic(
   () => import("./canvas/OrbitUniverseCanvas"),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => <div className="fixed inset-0 pointer-events-none bg-[#05060A]" />,
+  }
 );
 const OrbitDemoCenter = dynamic(
   () => import("./demo/OrbitDemoCenter").then((mod) => mod.OrbitDemoCenter),
@@ -237,10 +240,12 @@ export function OrbitExperience() {
       />
 
       {/* ── Orbit Product Demo Experience Center ── */}
-      <OrbitDemoCenter
-        isOpen={demoOpen}
-        onClose={handleCloseDemo}
-      />
+      {demoOpen && (
+        <OrbitDemoCenter
+          isOpen={demoOpen}
+          onClose={handleCloseDemo}
+        />
+      )}
 
       {/* ── Bottom-Left Quick Action ── */}
       <div className="fixed bottom-6 left-6 z-30">

@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   experimental: {
+    cpus: 1,
+    workerThreads: false,
     optimizePackageImports: [
       "three",
       "@react-three/fiber",
@@ -21,6 +23,8 @@ const nextConfig: NextConfig = {
       "@tanstack/react-query",
       "clsx",
       "tailwind-merge",
+      "react-markdown",
+      "lenis",
     ],
   },
   eslint: {
@@ -74,12 +78,12 @@ const nextConfig: NextConfig = {
     ];
   },
   onDemandEntries: {
-    maxInactiveAge: 15 * 1000,
-    pagesBufferLength: 2,
+    maxInactiveAge: 300 * 1000,
+    pagesBufferLength: 8,
   },
   webpack: (config, { dev }) => {
     if (dev) {
-      // Disable filesystem packfile cache in dev to prevent RangeError: Array buffer allocation failed
+      // Disable filesystem packfile cache in dev to prevent Array buffer allocation issues
       config.cache = false;
     }
     return config;
