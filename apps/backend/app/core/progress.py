@@ -254,3 +254,4 @@ async def subscribe_run_events(
         # Clean up queue listener
         if q in _async_listeners.get(run_id, []):
             _async_listeners[run_id].remove(q)
+

@@ -223,3 +223,4 @@ async def test_download_endpoint_strictly_real_zip_and_no_fakes(temp_env):
             pass
         downloaded_bytes = resp_ok.content
         assert len(downloaded_bytes) > 0
+
