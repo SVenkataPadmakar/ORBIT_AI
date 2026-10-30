@@ -246,17 +246,29 @@ def prd_generator(state: OrbitState) -> dict[str, Any]:
     # 2. Emit Progress Events for all 8 sections (Contract: % = sections_written / 8)
     total_sections = 8
     accumulated_content = ["# Product Requirements Document (PRD)\n\n"]
+    section_titles = [
+        "Overview & Goals",
+        "Target Users (Personas)",
+        "MVP Feature List (MoSCoW)",
+        "Non-Goals",
+        "Success Metrics",
+        "User Stories",
+        "Technical Constraints",
+        "Out of Scope for v1",
+    ]
 
     for sec_idx, section_content in enumerate(sections, start=1):
         accumulated_content.append(section_content)
         percent = int((sec_idx / total_sections) * 100)
         is_done = sec_idx == total_sections
+        sec_name = section_titles[sec_idx - 1] if sec_idx <= len(section_titles) else f"Section {sec_idx}"
         emit(
             run_id=run_id,
             agent="prd_generator",
             index=4,
             status="done" if is_done else "running",
             percent=percent,
+            log=f"Writing PRD section {sec_idx}/8: {sec_name}...",
             message=f"Writing PRD Section {sec_idx}/{total_sections}...",
             eta_seconds=max(0, (total_sections - sec_idx) * 8),
         )

@@ -132,12 +132,11 @@ async def test_get_run_download_orbit_zip(async_client, temp_run_env):
     run_dir = temp_run_env / test_run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create dummy artifact files in workspace
-    ws_dir = run_dir / "workspace"
-    ws_dir.mkdir(parents=True, exist_ok=True)
-    (ws_dir / "README.md").write_text("# ORBIT Generated Project\n", encoding="utf-8")
+    # Create generated orbit.zip artifact in run directory
+    with zipfile.ZipFile(run_dir / "orbit.zip", "w") as zf:
+        zf.writestr("README.md", "# ORBIT Generated Project\n")
 
-    # Request /download - triggers on-the-fly zip packaging
+    # Request /download - serves the real generated orbit.zip
     resp_dl = await async_client.get(f"/api/runs/{test_run_id}/download")
     assert resp_dl.status_code == 200
     assert resp_dl.headers["content-type"] == "application/zip"

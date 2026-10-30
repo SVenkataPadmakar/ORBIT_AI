@@ -89,6 +89,7 @@ def feasibility(state: OrbitState) -> dict[str, Any]:
         index=3,
         status="running",
         percent=0,
+        log="Verifying upstream artifacts (problem.md, market.md) and preparing 4-axis feasibility rubric...",
         message="Verifying upstream artifacts (problem.md, market.md) and initiating feasibility evaluation...",
         eta_seconds=60,
     )
@@ -110,6 +111,7 @@ def feasibility(state: OrbitState) -> dict[str, Any]:
         index=3,
         status="running",
         percent=50,
+        log="Evaluating market size (0-30), differentiation (0-30), timing (0-20), and complexity (0-20)...",
         message="Evaluating market size, differentiation, timing, and technical complexity via Gemini structured AI...",
         eta_seconds=30,
     )
@@ -236,6 +238,7 @@ def feasibility(state: OrbitState) -> dict[str, Any]:
         index=3,
         status="done",
         percent=100,
+        log=f"Feasibility gate evaluation complete: Score={total_score}/100, Verdict={verdict.upper()}.",
         message=f"Feasibility evaluation complete. Score: {total_score}/100 (Verdict: {verdict.upper()}).",
         eta_seconds=0,
     )

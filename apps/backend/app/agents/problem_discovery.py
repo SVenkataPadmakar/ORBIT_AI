@@ -64,6 +64,7 @@ def problem_discovery(state: OrbitState) -> dict[str, Any]:
         index=1,
         status="running",
         percent=0,
+        log="Initiating problem discovery: parsing core idea and founder context...",
         message=f"Initiating problem discovery for idea: '{idea_str[:50]}...'",
         eta_seconds=120,
     )
@@ -83,6 +84,7 @@ def problem_discovery(state: OrbitState) -> dict[str, Any]:
         index=1,
         status="running",
         percent=50,
+        log="Synthesizing user personas, pain frequency, and market alternatives via Gemini 2.0 Flash...",
         message="Synthesizing user personas, pain frequency, and current alternatives via Gemini 2.0 Flash...",
         eta_seconds=60,
     )
@@ -94,6 +96,17 @@ def problem_discovery(state: OrbitState) -> dict[str, Any]:
         if not api_key:
             logger.error("🛑 GEMINI_API_KEY is missing from environment/settings.")
             raise ValueError("GEMINI_API_KEY is required to execute Agent 1 (problem_discovery).")
+
+        emit(
+            run_id=run_id,
+            agent="problem_discovery",
+            index=1,
+            status="running",
+            percent=70,
+            log="Prompting Gemini to formulate Problem Statement, affected personas, and why-now catalyst...",
+            message="Prompting Gemini for problem.md sections...",
+            eta_seconds=30,
+        )
 
         try:
             from google import genai
@@ -159,6 +172,7 @@ def problem_discovery(state: OrbitState) -> dict[str, Any]:
         index=1,
         status="done",
         percent=100,
+        log="Problem discovery finalized. Validated problem.md persisted to artifact store.",
         message="Problem discovery complete: problem.md verified and committed to state.",
         eta_seconds=0,
     )

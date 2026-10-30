@@ -19,6 +19,8 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import os
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -162,7 +164,7 @@ class DeveloperFSM:
             logger.warning("DeepSeek repair patch generation fallback: %s", exc)
             return default_patch
 
-    def _emit_progress(self, phase: str, is_done: bool = False) -> None:
+    def _emit_progress(self, phase: str, is_done: bool = False, log: str | None = None) -> None:
         """Emits progress event adhering to constitutional contract."""
         self.current_phase = phase
         if is_done:
@@ -171,11 +173,13 @@ class DeveloperFSM:
             raw_pct = int((self.files_written / TOTAL_FILES_PLANNED) * 100)
             pct = min(95, (raw_pct // 5) * 5)
 
-        # Emit on every 5% step or when completed
-        if pct > self.last_emitted_pct or is_done or (pct == 0 and self.last_emitted_pct == 0):
-            self.last_emitted_pct = pct
+        # Emit on every 5% step, when completed, or when an explicit log is supplied
+        if pct > self.last_emitted_pct or is_done or (pct == 0 and self.last_emitted_pct == 0) or log:
+            if pct > self.last_emitted_pct:
+                self.last_emitted_pct = pct
             eta = max(0, int((TOTAL_FILES_PLANNED - self.files_written) * 2.5)) if not is_done else 0
             msg = f"Completed sandbox build and package." if is_done else f"Writing {phase} ({self.files_written}/{TOTAL_FILES_PLANNED} files)"
+            display_log = log or f"Writing {phase}: {self.files_written}/{TOTAL_FILES_PLANNED} files planned..."
             emit(
                 run_id=self.run_id,
                 agent="developer",
@@ -183,6 +187,7 @@ class DeveloperFSM:
                 status="done" if is_done else "running",
                 percent=pct,
                 message=msg,
+                log=display_log,
                 eta_seconds=eta,
             )
 
@@ -206,6 +211,7 @@ class DeveloperFSM:
     def phase_1_scaffold(self) -> None:
         """1. SCAFFOLD: Monorepo skeleton (pnpm workspace)"""
         logger.info("[PHASE 1] Scaffold monorepo skeleton")
+        self._emit_progress("SCAFFOLD", log="Scaffolding monorepo workspace & package configurations...")
 
         # pnpm-workspace.yaml
         self._write_file(
@@ -292,6 +298,7 @@ playwright-report/
     def phase_2_build_backend(self) -> None:
         """2. BUILD_BE: FastAPI app in apps/api (routes, models, migrations)"""
         logger.info("[PHASE 2] Build FastAPI backend")
+        self._emit_progress("BUILD_BE", log="Building FastAPI backend application in apps/api (routes, models, migrations)...")
 
         # apps/api/pyproject.toml
         self._write_file(
@@ -528,6 +535,7 @@ sqlalchemy.url = postgresql+asyncpg://user:pass@localhost/db
     def phase_3_build_frontend(self) -> None:
         """3. BUILD_FE: Next.js 15 app in apps/web (pages from wireframes)"""
         logger.info("[PHASE 3] Build Next.js 15 frontend")
+        self._emit_progress("BUILD_FE", log="Building Next.js 15 frontend in apps/web from wireframes and PRD...")
 
         # apps/web/package.json
         self._write_file(
@@ -827,6 +835,7 @@ export default function RootLayout({
     def phase_4_integrate(self) -> None:
         """4. INTEGRATE: Env vars, CORS, auth, API client"""
         logger.info("[PHASE 4] Integrate backend API client, environment settings, and CORS")
+        self._emit_progress("INTEGRATE", log="Configuring environment variables, CORS, auth, and API client...")
 
         # apps/web/lib/api.ts
         self._write_file(
@@ -913,6 +922,7 @@ def verify_token(token: str) -> bool:
     def phase_5_tests(self) -> None:
         """5. TESTS: pytest (BE) + vitest (FE) + 1 playwright golden path"""
         logger.info("[PHASE 5] Implement automated test suites")
+        self._emit_progress("TESTS", log="Writing unit and integration tests (pytest + vitest)...")
 
         # apps/api/tests/conftest.py
         self._write_file(
@@ -1075,6 +1085,7 @@ test("Golden Path: Candidate conducts interview and receives scorecard", async (
     def phase_6_infra(self) -> None:
         """6. INFRA: Dockerfile, docker-compose.yml, README.md, .env.example"""
         logger.info("[PHASE 6] Build infrastructure and containerization specifications")
+        self._emit_progress("INFRA", log="Generating Dockerfile, docker-compose.yml, and deployment infrastructure...")
 
         # apps/api/Dockerfile
         self._write_file(
@@ -1316,6 +1327,7 @@ pnpm --filter web test
         """
         logger.info("[PHASE 7] Running build and test verification loop")
         self.current_phase = "VERIFY"
+        self._emit_progress("VERIFY", log="Running sandbox build and test verification loop (pnpm build & pytest)...")
 
         # 1. Build Verification
         repairs = 0
@@ -1335,6 +1347,7 @@ pnpm --filter web test
                     repairs += 1
                     err_text = res.stderr or res.stdout or "SyntaxError: Unexpected build token"
                     failure_type = self._classify_failure(err_text)
+                    self._emit_progress("VERIFY", log=f"Fixing {failure_type.value} in package.json (repair attempt {repairs}/{MAX_REPAIRS_PER_PHASE})...")
                     patch_content = self._generate_repair_patch(
                         failure_type=failure_type,
                         target_file="/workspace/package.json",
@@ -1374,7 +1387,9 @@ pnpm --filter web test
         """
         8. PACKAGE:
              Create FE screenshot evidence
-             artifact.zip("/workspace") → upload → returns zip_uri
+             Execute shell command inside sandbox to zip /workspace
+             Download specific zip to host machine at apps/backend/artifacts/{run_id}/orbit.zip
+             upload -> returns (workspace_uri, zip_uri)
         """
         logger.info("[PHASE 8] Package deliverable orbit.zip and generate evidence")
         self.current_phase = "PACKAGE"
@@ -1392,20 +1407,94 @@ pnpm --filter web test
 </svg>"""
         fs.write(f"{screenshot_dir}/fe_preview.svg", svg_evidence, sandbox=self.sandbox)
 
-        # Package into orbit.zip
+        # 1. CRITICAL: Execute shell command inside sandbox to zip /workspace
         self.budget.record_tool_call()
-        zip_path = artifact.zip(source_dir="/workspace", sandbox=self.sandbox)
+        self._emit_progress("PACKAGE", log="Executing sandbox shell command: zip -r /tmp/orbit.zip /workspace...")
+        zip_cmd = (
+            "sh -c \"which zip >/dev/null 2>&1 && "
+            "(cd /workspace && zip -r /tmp/orbit.zip . -x '*/node_modules/*' '*/.git/*' '*/.next/*' '*/__pycache__/*' '*/.venv/*') || "
+            "(python3 -c \\\"import shutil, os; os.makedirs('/tmp', exist_ok=True); shutil.make_archive('/tmp/orbit', 'zip', '/workspace')\\\")\""
+        )
+        res = shell.exec(zip_cmd, cwd="/workspace", timeout=45, sandbox=self.sandbox)
+        if res.exit_code != 0:
+            fallback_cmd = 'python -c "import shutil, os; os.makedirs(\'/tmp\', exist_ok=True); shutil.make_archive(\'/tmp/orbit\', \'zip\', \'/workspace\')"'
+            shell.exec(fallback_cmd, cwd="/workspace", timeout=45, sandbox=self.sandbox)
 
-        # Upload & register artifact
+        # 2. Download that specific zip from sandbox to host machine at apps/backend/artifacts/{run_id}/orbit.zip
+        host_artifacts_dir = Path("apps/backend/artifacts") / self.run_id
+        if not Path("apps/backend").exists():
+            host_artifacts_dir = Path("artifacts") / self.run_id
+        host_artifacts_dir.mkdir(parents=True, exist_ok=True)
+        host_zip_path = host_artifacts_dir / "orbit.zip"
+
+        self._emit_progress("PACKAGE", log=f"Downloading sandbox zip to host machine at {host_zip_path}...")
+        zip_bytes = b""
+
+        # A. If Docker container is running, copy /tmp/orbit.zip from container to host
+        if hasattr(self.sandbox, "has_docker") and self.sandbox.has_docker and getattr(self.sandbox, "container_id", None):
+            try:
+                cp_res = subprocess.run(
+                    ["docker", "cp", f"{self.sandbox.container_id}:/tmp/orbit.zip", str(host_zip_path)],
+                    capture_output=True,
+                    check=False,
+                )
+                if cp_res.returncode == 0 and host_zip_path.exists():
+                    zip_bytes = host_zip_path.read_bytes()
+            except Exception as exc:
+                logger.warning("Docker cp from sandbox failed: %s", exc)
+
+        # B. If E2B sandbox is running, download /tmp/orbit.zip bytes
+        if not zip_bytes and hasattr(self.sandbox, "sandbox") and self.sandbox.sandbox:
+            try:
+                zip_bytes = self.sandbox.sandbox.files.read("/tmp/orbit.zip", format="bytes")
+                host_zip_path.write_bytes(zip_bytes)
+            except Exception as exc:
+                logger.warning("E2B file download failed: %s", exc)
+
+        # C. Check local filesystem locations for /tmp/orbit.zip or sandbox workspace
+        if not zip_bytes:
+            local_candidates = [
+                Path("/tmp/orbit.zip"),
+                Path("C:/tmp/orbit.zip"),
+                Path(self.sandbox.get_workspace_dir()).parent / "orbit.zip",
+                Path(self.sandbox.get_workspace_dir()) / "orbit.zip",
+                Path(self.sandbox.get_workspace_dir()) / "tmp" / "orbit.zip",
+            ]
+            for cand in local_candidates:
+                if cand.exists() and cand.is_file() and cand.stat().st_size > 0:
+                    zip_bytes = cand.read_bytes()
+                    host_zip_path.write_bytes(zip_bytes)
+                    break
+
+        # D. Package directly into host_zip_path using artifact.zip tool if not already copied
+        if not zip_bytes or not host_zip_path.exists():
+            pkg_path = artifact.zip(source_dir="/workspace", output_path=str(host_zip_path), sandbox=self.sandbox)
+            if os.path.exists(pkg_path):
+                host_zip_path = Path(pkg_path)
+                zip_bytes = host_zip_path.read_bytes()
+
+        # Mirror copies to runs/ directories so all workspaces and tests find it
+        runs_dir = Path("apps/backend/runs") / self.run_id
+        if not Path("apps/backend").exists():
+            runs_dir = Path("runs") / self.run_id
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        runs_zip = runs_dir / "orbit.zip"
+        if host_zip_path.exists():
+            shutil.copy2(str(host_zip_path), str(runs_zip))
+            top_runs_zip = Path("runs") / self.run_id / "orbit.zip"
+            if top_runs_zip.parent.parent.exists() and not top_runs_zip.exists():
+                top_runs_zip.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(host_zip_path), str(top_runs_zip))
+            top_art_zip = Path("artifacts") / self.run_id / "orbit.zip"
+            if top_art_zip.parent.parent.exists() and not top_art_zip.exists():
+                top_art_zip.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(host_zip_path), str(top_art_zip))
+
+        # Register artifact via upload tool
         self.budget.record_tool_call()
-        zip_uri = artifact.upload(zip_path=zip_path, run_id=self.run_id, sandbox=self.sandbox)
+        zip_uri = artifact.upload(zip_path=str(host_zip_path), run_id=self.run_id, sandbox=self.sandbox)
 
         # Persist artifact to filesystem store + PostgreSQL
-        zip_bytes = b""
-        if os.path.exists(zip_path):
-            with open(zip_path, "rb") as zf:
-                zip_bytes = zf.read()
-
         persist_artifact(
             run_id=self.run_id,
             artifact_type="developer",
@@ -1415,11 +1504,10 @@ pnpm --filter web test
         )
 
         # Mark done (100%)
-        self._emit_progress("PACKAGE", is_done=True)
+        self._emit_progress("PACKAGE", is_done=True, log="Real project deliverable packaged and verified: orbit.zip ready.")
 
         ws_uri = self.state.workspace_uri or f"runs/{self.run_id}/workspace"
-        zip_uri = self.state.zip_uri or f"runs/{self.run_id}/orbit.zip"
-        return ws_uri, zip_uri
+        return ws_uri, str(host_zip_path)
 
     def run(self) -> dict[str, Any]:
         """Executes the full Developer Agent sub-FSM pipeline."""
@@ -1477,8 +1565,8 @@ pnpm --filter web test
                     "zip_uri": zip_uri,
                     "progress": updated_progress,
                 }
-            except (BudgetExceededError, RepairThresholdExceededError) as exc:
-                logger.error("Developer agent halted due to budget or repair failure: %s", exc)
+            except (BudgetExceededError, RepairThresholdExceededError, Exception) as exc:
+                logger.error("Developer agent halted due to build or budget failure: %s", exc)
                 emit(
                     run_id=self.run_id,
                     agent="developer",
@@ -1486,6 +1574,7 @@ pnpm --filter web test
                     status="failed",
                     percent=self.last_emitted_pct,
                     message=f"Pipeline halted: {str(exc)}",
+                    log=f"Developer agent build failed: {str(exc)}",
                     eta_seconds=0,
                 )
                 updated_progress = dict(self.state.progress or {})

@@ -217,7 +217,7 @@ async def stream_events_from_redis(
     """
     settings = get_settings()
     channel_name = f"orbit:run:{run_id}:events"
-    yielded_keys: set[tuple[str, int, int, str]] = set()
+    yielded_keys: set[tuple[str, int, int, str, Optional[str]]] = set()
 
     # 1. Replay historical events from Redis / in-memory cache
     history = get_run_history(run_id)
@@ -227,7 +227,8 @@ async def stream_events_from_redis(
         idx = int(ev.get("agent_index", ev.get("index", 1)))
         pct = int(ev.get("percent", 0))
         st = str(ev.get("status", ""))
-        key = (agent, idx, pct, st)
+        lg = ev.get("log")
+        key = (agent, idx, pct, st, lg)
         if key not in yielded_keys:
             yielded_keys.add(key)
             yield ev
@@ -293,7 +294,8 @@ async def stream_events_from_redis(
                 idx = int(ev.get("agent_index", ev.get("index", 1)))
                 pct = int(ev.get("percent", 0))
                 st = str(ev.get("status", ""))
-                key = (agent, idx, pct, st)
+                lg = ev.get("log")
+                key = (agent, idx, pct, st, lg)
                 if key not in yielded_keys:
                     yielded_keys.add(key)
                     yield ev
@@ -356,7 +358,8 @@ async def get_run_sse_stream(
                 "agent_index": ev.get("agent_index", ev.get("index", 1)),
                 "percent": int(ev.get("percent", 0)),
                 "status": ev.get("status", "running"),
-                "message": ev.get("message", ""),
+                "log": ev.get("log"),
+                "message": ev.get("message") or ev.get("log") or "",
             }
             yield f"data: {json.dumps(event_data)}\n\n"
 
@@ -507,90 +510,62 @@ async def get_agent_artifact(run_id: str, agent_name: str) -> Response:
 async def download_orbit_zip(run_id: str) -> FileResponse:
     """
     GET /api/runs/{run_id}/download and GET /api/runs/{run_id}/download/orbit.zip
-    Returns the generated orbit.zip using FastAPI's FileResponse.
-    If orbit.zip does not exist on disk but workspace/run artifacts exist,
-    packages them on the fly so the deliverable is always downloadable.
-    If run_id is a mock or unstarted ID, seamlessly serves the golden deliverable.
+    Serves the exact dynamically generated orbit.zip created by the Developer Agent.
+    - If the Developer Agent failed to build the project, fails with 400 Bad Request.
+    - If the deliverable does not exist for the run, returns 404 Not Found.
+    - Never serves fake or static placeholder zips.
     """
-    run_dir = _get_run_dir(run_id)
-    zip_path = run_dir / "orbit.zip"
-
-    # 1. Check existing zip archives
-    if not zip_path.exists():
-        alt_zip = run_dir / "workspace" / "orbit.zip"
-        if alt_zip.exists():
-            zip_path = alt_zip
-
-    # 2. If no zip archive exists, package workspace or artifacts dynamically
-    if not zip_path.exists() and run_dir.exists():
-        ws_dir = run_dir / "workspace"
-        target_dir = ws_dir if (ws_dir.exists() and any(ws_dir.iterdir())) else run_dir
-
-        # Exclude directories
-        exclude_dirs = {".git", "node_modules", ".next", "__pycache__", ".pytest_cache", ".venv", "venv", "dist"}
-
-        files_to_pack = [
-            f for f in target_dir.rglob("*")
-            if f.is_file() and not f.name.endswith(".zip") and not any(part in exclude_dirs for part in f.parts)
-        ]
-
-        if files_to_pack:
-            logger.info("Packaging on-the-fly orbit.zip from %s (%d files) for run %s", target_dir, len(files_to_pack), run_id)
-            os.makedirs(run_dir, exist_ok=True)
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file_p in files_to_pack:
-                    rel_p = file_p.relative_to(target_dir)
-                    zf.write(file_p, arcname=str(rel_p).replace("\\", "/"))
-
-    # 3. Fallback: If still no zip exists (e.g. unstarted/mock run_id or newly initialized project),
-    # borrow/duplicate the golden deliverable orbit.zip from the latest completed run
-    if not zip_path.exists():
-        fallback_candidates = [
-            Path("runs/run-zip-integrity-01/orbit.zip"),
-            Path("../runs/run-zip-integrity-01/orbit.zip"),
-            Path("runs/test-debug-run-01/orbit.zip"),
-            Path("../runs/test-debug-run-01/orbit.zip"),
-            Path("runs/run-orbit-v2-discovery-01/orbit.zip"),
-            Path("../runs/run-orbit-v2-discovery-01/orbit.zip"),
-            Path("runs/run-deepseek-scaffold-01/orbit.zip"),
-            Path("../runs/run-deepseek-scaffold-01/orbit.zip"),
-            Path("runs/run-dev-fsm-01/orbit.zip"),
-            Path("../runs/run-dev-fsm-01/orbit.zip"),
-            Path("apps/backend/runs/run-45033be6a702/orbit.zip"),
-            Path("../apps/backend/runs/run-45033be6a702/orbit.zip"),
-        ]
-        for cand in fallback_candidates:
-            if cand.exists() and cand.stat().st_size > 0:
-                os.makedirs(run_dir, exist_ok=True)
-                shutil.copy2(str(cand.resolve()), str(zip_path))
-                break
-
-    # 4. Ultimate fallback: if no zip exists on entire machine, construct a clean deliverable on the fly
-    if not zip_path.exists():
-        os.makedirs(run_dir, exist_ok=True)
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("README.md", f"# ORBIT Project Deliverable\nRun ID: {run_id}\nGenerated by the 7-Agent Autonomous Pipeline.\n")
-            zf.writestr("problem.md", "# Problem Discovery\nTarget customer identified: Clinic operations leaders and triage coordinators.\n")
-            zf.writestr("feasibility.json", json.dumps({"score": 92, "status": "approved", "run_id": run_id}, indent=2))
-            zf.writestr("PRD.md", "# Product Requirements Document\nAutonomous AI Operations Copilot.\n")
-            zf.writestr("architecture.md", "# System Architecture\nFastAPI backend + Next.js 15 frontend + PostgreSQL + Redis.\n")
-            zf.writestr("schema.sql", "-- Schema Definition\nCREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT);\n")
-            zf.writestr("openapi.yaml", "openapi: 3.0.0\ninfo:\n  title: ORBIT API\n  version: 1.0.0\npaths: {}\n")
-            zf.writestr("risk.md", "# Risk & Security Assessment\nAll SOC2 and HIPAA controls validated.\n")
-            zf.writestr("docker-compose.yml", "version: '3.8'\nservices:\n  api:\n    build: ./apps/api\n    ports:\n      - '8000:8000'\n")
-
-    # 5. Deliver zip file
-    if zip_path.exists():
-        return FileResponse(
-            path=str(zip_path),
-            media_type="application/zip",
-            filename="orbit.zip",
-            headers={"Content-Disposition": 'attachment; filename="orbit.zip"'},
+    # 1. Check if the Developer Agent failed during build/verify
+    history = get_run_history(run_id)
+    failed_event = next(
+        (ev for ev in history if ev.get("status") == "failed" and ev.get("agent") in ("developer", "pipeline")),
+        None,
+    )
+    if failed_event:
+        err_msg = (
+            failed_event.get("message")
+            or failed_event.get("log")
+            or "Developer agent was unable to build the project."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Build failed: {err_msg}",
         )
 
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Deliverable orbit.zip not found for run {run_id}",
+    # 2. Check for the dynamically generated orbit.zip
+    candidates = [
+        Path("apps/backend/artifacts") / run_id / "orbit.zip",
+        Path("artifacts") / run_id / "orbit.zip",
+        Path("apps/backend/runs") / run_id / "orbit.zip",
+        Path("runs") / run_id / "orbit.zip",
+        Path("apps/backend/runs") / run_id / "workspace" / "orbit.zip",
+        Path("runs") / run_id / "workspace" / "orbit.zip",
+    ]
+    env_art_dir = os.getenv("ORBIT_ARTIFACTS_DIR")
+    if env_art_dir:
+        candidates.insert(0, Path(env_art_dir) / run_id / "orbit.zip")
+    env_runs_dir = os.getenv("ORBIT_RUNS_DIR")
+    if env_runs_dir:
+        candidates.insert(0, Path(env_runs_dir) / run_id / "orbit.zip")
+
+    target_zip: Optional[Path] = None
+    for cand in candidates:
+        if cand.exists() and cand.is_file() and cand.stat().st_size > 0:
+            target_zip = cand.resolve()
+            break
+
+    # 3. If file does not exist, return 404 (No fake fallbacks)
+    if not target_zip or not target_zip.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Deliverable orbit.zip not found for run '{run_id}'. Project build has not completed or file does not exist.",
+        )
+
+    return FileResponse(
+        path=str(target_zip),
+        media_type="application/zip",
+        filename="orbit.zip",
+        headers={"Content-Disposition": 'attachment; filename="orbit.zip"'},
     )
 
 

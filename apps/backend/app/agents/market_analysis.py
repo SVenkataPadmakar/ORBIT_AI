@@ -47,6 +47,7 @@ def market_analysis(state: OrbitState) -> dict[str, Any]:
         index=2,
         status="running",
         percent=0,
+        log="Verifying problem.md handoff contract and initiating market intelligence query...",
         message="Verifying problem.md handoff and initiating market intelligence query...",
         eta_seconds=120,
     )
@@ -70,6 +71,7 @@ def market_analysis(state: OrbitState) -> dict[str, Any]:
         index=2,
         status="running",
         percent=30,
+        log="Scanning competitor websites, pricing tiers, and alternative solutions via Tavily Search...",
         message="Executing web research via Tavily Search API for competitors and pricing...",
         eta_seconds=80,
     )
@@ -101,6 +103,7 @@ def market_analysis(state: OrbitState) -> dict[str, Any]:
             index=2,
             status="running",
             percent=70,
+            log="Synthesizing competitor matrix, TAM/SAM/SOM sizing, and defensibility moat via Gemini 2.0 Flash...",
             message="Synthesizing competitor matrix, TAM/SAM/SOM, and defensibility via Gemini 2.0 Flash...",
             eta_seconds=40,
         )
@@ -169,6 +172,7 @@ def market_analysis(state: OrbitState) -> dict[str, Any]:
         index=2,
         status="done",
         percent=100,
+        log="Market analysis completed. Verified market.md written to artifact store.",
         message="Market analysis complete: market.md verified and committed to state.",
         eta_seconds=0,
     )

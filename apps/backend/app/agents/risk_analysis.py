@@ -348,6 +348,7 @@ def risk_analysis(state: OrbitState) -> dict[str, Any]:
             index=7,
             status="running",
             percent=pct,
+            log=f"Evaluating risk vector {i}/{total_risks} [{item['category']}]: {item['title']}...",
             message=f"Evaluating risk {i}/{total_risks} [{item['category']}]: {item['title']}",
             eta_seconds=eta,
         )
@@ -372,6 +373,7 @@ def risk_analysis(state: OrbitState) -> dict[str, Any]:
         index=7,
         status="done",
         percent=100,
+        log="Risk analysis complete: risk.md generated and all 7 constitutional agents finished.",
         message="Risk analysis completed. All 7 constitutional agents finished successfully.",
         eta_seconds=0,
     )

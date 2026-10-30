@@ -650,6 +650,7 @@ def design(state: OrbitState) -> dict[str, Any]:
         index=5,
         status="running",
         percent=25,
+        log="Generating C4 container diagram, tech stack, and ADRs (architecture.md)...",
         message="Generated architecture.md with C4 Container diagram, tech stack, and ADRs (1/4).",
         eta_seconds=45,
     )
@@ -668,6 +669,7 @@ def design(state: OrbitState) -> dict[str, Any]:
         index=5,
         status="running",
         percent=50,
+        log="Generating 3NF relational PostgreSQL schema with indexes (schema.sql)...",
         message="Generated schema.sql with 8 normalized 3NF PostgreSQL tables (2/4).",
         eta_seconds=30,
     )
@@ -686,6 +688,7 @@ def design(state: OrbitState) -> dict[str, Any]:
         index=5,
         status="running",
         percent=75,
+        log="Generating OpenAPI 3.1 REST API specification covering MVP endpoints (openapi.yaml)...",
         message="Generated openapi.yaml compliant with OpenAPI 3.1 covering all MVP endpoints (3/4).",
         eta_seconds=15,
     )
@@ -704,6 +707,7 @@ def design(state: OrbitState) -> dict[str, Any]:
         index=5,
         status="done",
         percent=100,
+        log="Generating ASCII wireframe mockups for MVP pages (wireframes.md). All design artifacts verified.",
         message="Design agent complete: generated architecture.md, schema.sql, openapi.yaml, wireframes.md.",
         eta_seconds=0,
     )
